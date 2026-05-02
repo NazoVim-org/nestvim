@@ -1,12 +1,17 @@
 import { Terminal } from "./terminal";
 import { TextBuffer } from "./buffer";
 import { Renderer } from "./renderer";
+import { PluginManager } from "./plugin/manager";
 import type { EditorState, Mode } from "./types";
 
 export class Editor {
   private terminal = new Terminal();
   private buffer = new TextBuffer();
   private renderer = new Renderer(this.terminal);
+  private pluginManager = new PluginManager(
+    () => this.buffer,
+    () => this.state
+  );
   private state: EditorState = {
     mode: "normal",
     cursor: { line: 1, col: 0 },
@@ -23,9 +28,13 @@ export class Editor {
       this.state.filePath = filePath;
     }
 
+    await this.pluginManager.loadAll();
+
     this.terminal.enableRawMode();
     this.terminal.hideCursor();
     this.running = true;
+
+    this.pluginManager.emit("editor:ready", undefined);
 
     process.on("exit", () => this.cleanup());
     process.on("SIGINT", () => { this.cleanup(); process.exit(0); });
@@ -37,22 +46,25 @@ export class Editor {
         this.terminal.showCursor();
 
         const key = await this.terminal.readKey();
-        this.handleKey(key);
+        await this.handleKey(key);
       }
     } finally {
       this.cleanup();
     }
   }
 
-  private handleKey(key: string): void {
+  private async handleKey(key: string): Promise<void> {
     switch (this.state.mode) {
-      case "normal": this.handleNormal(key); break;
-      case "insert": this.handleInsert(key); break;
-      case "command": this.handleCommand(key); break;
+      case "normal": await this.handleNormal(key); break;
+      case "insert": await this.handleInsert(key); break;
+      case "command": await this.handleCommand(key); break;
     }
   }
 
-  private handleNormal(key: string): void {
+  private async handleNormal(key: string): Promise<void> {
+    const handled = await this.pluginManager.keymaps.handle("normal", key);
+    if (handled) return;
+
     const { cursor } = this.state;
     const lineCount = this.buffer.lineCount;
 
@@ -75,22 +87,35 @@ export class Editor {
         cursor.col = Math.min(cursor.col, len > 0 ? len - 1 : 0);
         break;
       }
-      case "i": this.state.mode = "insert"; break;
-      case ":":
+      case "i": {
+        const prevMode = this.state.mode;
+        this.state.mode = "insert";
+        this.pluginManager.emit("mode:change", { from: prevMode, to: "insert" });
+        break;
+      }
+      case ":": {
+        const prevMode = this.state.mode;
+        this.state.mode = "command";
         this.terminal.moveCursor(this.terminal.rows, 1);
         process.stdout.write(":");
         this.commandBuffer = "";
-        this.state.mode = "command";
+        this.pluginManager.emit("mode:change", { from: prevMode, to: "command" });
         break;
+      }
     }
   }
 
-  private handleInsert(key: string): void {
+  private async handleInsert(key: string): Promise<void> {
+    const handled = await this.pluginManager.keymaps.handle("insert", key);
+    if (handled) return;
+
     const { cursor } = this.state;
 
     if (key === "\x1b") {
+      const prevMode = this.state.mode;
       this.state.mode = "normal";
       cursor.col = Math.max(0, cursor.col - 1);
+      this.pluginManager.emit("mode:change", { from: prevMode, to: "normal" });
       return;
     }
 
@@ -98,10 +123,12 @@ export class Editor {
       if (cursor.col > 0) {
         this.buffer.delete(cursor.line, cursor.col - 1);
         cursor.col--;
+        this.pluginManager.emit("buffer:change", { buffer: this.buffer });
       } else if (cursor.line > 1) {
         const newCol = this.buffer.mergeWithPrevLine(cursor.line);
         cursor.line--;
         cursor.col = newCol;
+        this.pluginManager.emit("buffer:change", { buffer: this.buffer });
       }
       return;
     }
@@ -110,32 +137,52 @@ export class Editor {
       this.buffer.insert(cursor.line, cursor.col, "\n");
       cursor.line++;
       cursor.col = 0;
+      this.pluginManager.emit("buffer:change", { buffer: this.buffer });
       return;
     }
 
     this.buffer.insert(cursor.line, cursor.col, key);
     cursor.col++;
+    this.pluginManager.emit("buffer:change", { buffer: this.buffer });
   }
 
-  private handleCommand(key: string): void {
+  private async handleCommand(key: string): Promise<void> {
     if (key === "\r") {
       const cmd = this.commandBuffer.trim();
       this.commandBuffer = "";
+      const prevMode = this.state.mode;
       this.state.mode = "normal";
+      this.pluginManager.emit("mode:change", { from: prevMode, to: "normal" });
 
       if (cmd === "q") {
         this.running = false;
       } else if (cmd === "w") {
-        this.buffer.saveFile().catch(console.error);
+        this.buffer.saveFile().then(() => {
+          if (this.state.filePath) {
+            this.pluginManager.emit("buffer:save", { filePath: this.state.filePath });
+          }
+        }).catch(console.error);
       } else if (cmd === "wq") {
-        this.buffer.saveFile().then(() => { this.running = false; }).catch(console.error);
+        this.buffer.saveFile().then(() => {
+          if (this.state.filePath) {
+            this.pluginManager.emit("buffer:save", { filePath: this.state.filePath });
+          }
+          this.running = false;
+        }).catch(console.error);
+      } else {
+        const found = await this.pluginManager.commands.execute(cmd);
+        if (!found) {
+          process.stderr.write(`[editor] Unknown command: ${cmd}\n`);
+        }
       }
       return;
     }
 
     if (key === "\x1b") {
+      const prevMode = this.state.mode;
       this.commandBuffer = "";
       this.state.mode = "normal";
+      this.pluginManager.emit("mode:change", { from: prevMode, to: "normal" });
       return;
     }
 

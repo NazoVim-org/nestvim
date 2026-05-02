@@ -8,7 +8,8 @@
     "dev": "bun --watch src/main.ts"
   },
   "dependencies": {
-    "@codemirror/state": "^6.0.0"
+    "@codemirror/state": "^6.0.0",
+    "wasmoon": "^1.16.0"
   },
   "devDependencies": {
     "@types/bun": "latest"

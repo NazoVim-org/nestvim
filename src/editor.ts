@@ -15,6 +15,7 @@ export class Editor {
   };
   private running = false;
   private commandBuffer = "";
+  private cleaned = false;
 
   async run(filePath?: string): Promise<void> {
     if (filePath) {
@@ -57,9 +58,23 @@ export class Editor {
 
     switch (key) {
       case "h": cursor.col = Math.max(0, cursor.col - 1); break;
-      case "l": cursor.col++; break;
-      case "j": cursor.line = Math.min(lineCount, cursor.line + 1); break;
-      case "k": cursor.line = Math.max(1, cursor.line - 1); break;
+      case "l": {
+        const lineLen = this.buffer.getLine(cursor.line).length;
+        cursor.col = Math.min(lineLen > 0 ? lineLen - 1 : 0, cursor.col + 1);
+        break;
+      }
+      case "j": {
+        cursor.line = Math.min(lineCount, cursor.line + 1);
+        const len = this.buffer.getLine(cursor.line).length;
+        cursor.col = Math.min(cursor.col, len > 0 ? len - 1 : 0);
+        break;
+      }
+      case "k": {
+        cursor.line = Math.max(1, cursor.line - 1);
+        const len = this.buffer.getLine(cursor.line).length;
+        cursor.col = Math.min(cursor.col, len > 0 ? len - 1 : 0);
+        break;
+      }
       case "i": this.state.mode = "insert"; break;
       case ":":
         this.terminal.moveCursor(this.terminal.rows, 1);
@@ -83,6 +98,10 @@ export class Editor {
       if (cursor.col > 0) {
         this.buffer.delete(cursor.line, cursor.col - 1);
         cursor.col--;
+      } else if (cursor.line > 1) {
+        const newCol = this.buffer.mergeWithPrevLine(cursor.line);
+        cursor.line--;
+        cursor.col = newCol;
       }
       return;
     }
@@ -131,6 +150,8 @@ export class Editor {
   }
 
   private cleanup(): void {
+    if (this.cleaned) return;
+    this.cleaned = true;
     this.terminal.showCursor();
     this.terminal.disableRawMode();
     this.terminal.clearScreen();

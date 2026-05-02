@@ -6,13 +6,13 @@ export class Renderer {
   constructor(private terminal: Terminal) {}
 
   render(buffer: TextBuffer, state: EditorState): void {
-    this.terminal.clearScreen();
+    this.terminal.moveHome();
 
     const visibleRows = this.terminal.rows - 2;
 
     for (let i = 1; i <= visibleRows; i++) {
       const line = buffer.getLine(i);
-      this.terminal.writeLine(i, line ?? "~");
+      this.terminal.writeLine(i, line || "~");
     }
 
     const status = `-- ${state.mode.toUpperCase()} -- ${state.filePath ?? "[No Name]"}${state.dirty ? " [+]" : ""}`;

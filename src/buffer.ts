@@ -55,4 +55,16 @@ export class TextBuffer {
     await Bun.write(this.filePath, this.toString());
     this.dirty = false;
   }
+
+  mergeWithPrevLine(line: number): number {
+    if (line <= 1) return 0;
+    const prevLine = this.doc.line(line - 1);
+    const curLine = this.doc.line(line);
+    const mergedCol = prevLine.text.length;
+    const before = this.doc.sliceString(0, prevLine.to);
+    const after = this.doc.sliceString(curLine.from);
+    this.doc = Text.of((before + after).split("\n"));
+    this.dirty = true;
+    return mergedCol;
+  }
 }

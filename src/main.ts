@@ -1,9 +1,9 @@
 import { Editor } from "./editor";
 
 async function main() {
-  console.log("nazoedit starting...");
+  const filePath = process.argv[2];
   const editor = new Editor();
-  await editor.run();
+  await editor.run(filePath);
 }
 
 main().catch((err) => {

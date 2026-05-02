@@ -31,6 +31,10 @@ export class Terminal {
     process.stdout.write("\x1b[2J");
   }
 
+  moveHome(): void {
+    process.stdout.write("\x1b[H");
+  }
+
   hideCursor(): void {
     process.stdout.write("\x1b[?25l");
   }

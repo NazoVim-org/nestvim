@@ -5,11 +5,6 @@ export interface Position {
   col: number;
 }
 
-export interface Size {
-  rows: number;
-  cols: number;
-}
-
 export interface EditorState {
   mode: Mode;
   cursor: Position;

@@ -26,6 +26,7 @@ export class Editor {
     if (filePath) {
       await this.buffer.loadFile(filePath);
       this.state.filePath = filePath;
+      this.renderer.resetScroll();
     }
 
     await this.pluginManager.loadAll();
@@ -34,7 +35,7 @@ export class Editor {
     this.terminal.hideCursor();
     this.running = true;
 
-    this.pluginManager.emit("editor:ready", undefined);
+    await this.pluginManager.emit("editor:ready", undefined);
 
     process.on("exit", () => this.cleanup());
     process.on("SIGINT", () => { this.cleanup(); process.exit(0); });
@@ -62,6 +63,7 @@ export class Editor {
   }
 
   private async handleNormal(key: string): Promise<void> {
+    await this.pluginManager.emit("key:normal", { key });
     const handled = await this.pluginManager.keymaps.handle("normal", key);
     if (handled) return;
 
@@ -90,7 +92,7 @@ export class Editor {
       case "i": {
         const prevMode = this.state.mode;
         this.state.mode = "insert";
-        this.pluginManager.emit("mode:change", { from: prevMode, to: "insert" });
+        await this.pluginManager.emit("mode:change", { from: prevMode, to: "insert" });
         break;
       }
       case ":": {
@@ -99,13 +101,14 @@ export class Editor {
         this.terminal.moveCursor(this.terminal.rows, 1);
         process.stdout.write(":");
         this.commandBuffer = "";
-        this.pluginManager.emit("mode:change", { from: prevMode, to: "command" });
+        await this.pluginManager.emit("mode:change", { from: prevMode, to: "command" });
         break;
       }
     }
   }
 
   private async handleInsert(key: string): Promise<void> {
+    await this.pluginManager.emit("key:insert", { key });
     const handled = await this.pluginManager.keymaps.handle("insert", key);
     if (handled) return;
 
@@ -115,7 +118,7 @@ export class Editor {
       const prevMode = this.state.mode;
       this.state.mode = "normal";
       cursor.col = Math.max(0, cursor.col - 1);
-      this.pluginManager.emit("mode:change", { from: prevMode, to: "normal" });
+      await this.pluginManager.emit("mode:change", { from: prevMode, to: "normal" });
       return;
     }
 
@@ -123,12 +126,12 @@ export class Editor {
       if (cursor.col > 0) {
         this.buffer.delete(cursor.line, cursor.col - 1);
         cursor.col--;
-        this.pluginManager.emit("buffer:change", { buffer: this.buffer });
+        await this.pluginManager.emit("buffer:change", { buffer: this.buffer });
       } else if (cursor.line > 1) {
         const newCol = this.buffer.mergeWithPrevLine(cursor.line);
         cursor.line--;
         cursor.col = newCol;
-        this.pluginManager.emit("buffer:change", { buffer: this.buffer });
+        await this.pluginManager.emit("buffer:change", { buffer: this.buffer });
       }
       return;
     }
@@ -137,13 +140,13 @@ export class Editor {
       this.buffer.insert(cursor.line, cursor.col, "\n");
       cursor.line++;
       cursor.col = 0;
-      this.pluginManager.emit("buffer:change", { buffer: this.buffer });
+      await this.pluginManager.emit("buffer:change", { buffer: this.buffer });
       return;
     }
 
     this.buffer.insert(cursor.line, cursor.col, key);
     cursor.col++;
-    this.pluginManager.emit("buffer:change", { buffer: this.buffer });
+    await this.pluginManager.emit("buffer:change", { buffer: this.buffer });
   }
 
   private async handleCommand(key: string): Promise<void> {
@@ -152,23 +155,29 @@ export class Editor {
       this.commandBuffer = "";
       const prevMode = this.state.mode;
       this.state.mode = "normal";
-      this.pluginManager.emit("mode:change", { from: prevMode, to: "normal" });
+      await this.pluginManager.emit("mode:change", { from: prevMode, to: "normal" });
 
       if (cmd === "q") {
         this.running = false;
       } else if (cmd === "w") {
-        this.buffer.saveFile().then(() => {
+        try {
+          await this.buffer.saveFile();
           if (this.state.filePath) {
-            this.pluginManager.emit("buffer:save", { filePath: this.state.filePath });
+            await this.pluginManager.emit("buffer:save", { filePath: this.state.filePath });
           }
-        }).catch(console.error);
+        } catch (err) {
+          process.stderr.write(`[editor] Save failed: ${err}\n`);
+        }
       } else if (cmd === "wq") {
-        this.buffer.saveFile().then(() => {
+        try {
+          await this.buffer.saveFile();
           if (this.state.filePath) {
-            this.pluginManager.emit("buffer:save", { filePath: this.state.filePath });
+            await this.pluginManager.emit("buffer:save", { filePath: this.state.filePath });
           }
           this.running = false;
-        }).catch(console.error);
+        } catch (err) {
+          process.stderr.write(`[editor] Save failed: ${err}\n`);
+        }
       } else {
         const found = await this.pluginManager.commands.execute(cmd);
         if (!found) {
@@ -182,7 +191,7 @@ export class Editor {
       const prevMode = this.state.mode;
       this.commandBuffer = "";
       this.state.mode = "normal";
-      this.pluginManager.emit("mode:change", { from: prevMode, to: "normal" });
+      await this.pluginManager.emit("mode:change", { from: prevMode, to: "normal" });
       return;
     }
 

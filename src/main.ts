@@ -7,6 +7,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  process.stderr.write(`[editor] Fatal error: ${err instanceof Error ? err.message : err}\n`);
   process.exit(1);
 });

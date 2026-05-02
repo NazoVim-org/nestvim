@@ -5,7 +5,7 @@ export class CommandRegistry {
 
   register(name: string, handler: CommandHandler): void {
     if (this.commands.has(name)) {
-      console.warn(`[CommandRegistry] Command "${name}" is already registered. Overwriting.`);
+      process.stderr.write(`[CommandRegistry] Command "${name}" is already registered. Overwriting.\n`);
     }
     this.commands.set(name, handler);
   }

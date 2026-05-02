@@ -31,7 +31,7 @@ export class PluginManager {
   }
 
   async loadAll(): Promise<void> {
-    const pluginsDir = join(process.cwd(), "src", "plugins");
+    const pluginsDir = join(import.meta.dir, "..", "plugins");
 
     const [tsPlugins, luaPlugins] = await Promise.all([
       loadTSPlugins(pluginsDir),
@@ -43,7 +43,7 @@ export class PluginManager {
         await plugin.definition.setup(this.api);
         this.plugins.push(plugin);
       } catch (err) {
-        console.error(`[PluginManager] setup() failed for "${plugin.name}":`, err);
+        process.stderr.write(`[PluginManager] setup() failed for "${plugin.name}": ${err instanceof Error ? err.message : err}\n`);
       }
     }
 
@@ -54,10 +54,10 @@ export class PluginManager {
     );
   }
 
-  emit<T extends EditorEventName>(
+  async emit<T extends EditorEventName>(
     event: T,
     payload: EditorEventPayload<T>
-  ): void {
-    this.emitter.emit(event, payload);
+  ): Promise<void> {
+    await this.emitter.emit(event, payload);
   }
 }

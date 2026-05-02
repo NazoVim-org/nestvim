@@ -23,17 +23,19 @@ export class EventEmitter {
     this.listeners.get(event)?.delete(handler);
   }
 
-  emit<T extends EditorEventName>(
+  async emit<T extends EditorEventName>(
     event: T,
     payload: EditorEventPayload<T>
-  ): void {
-    this.listeners.get(event)?.forEach((handler) => {
+  ): Promise<void> {
+    const handlers = this.listeners.get(event);
+    if (!handlers) return;
+    for (const handler of handlers) {
       try {
-        handler(payload);
+        await handler(payload);
       } catch (err) {
-        console.error(`[EventEmitter] Error in handler for "${event}":`, err);
+        process.stderr.write(`[EventEmitter] Error in handler for "${event}": ${err}\n`);
       }
-    });
+    }
   }
 
   clear(): void {

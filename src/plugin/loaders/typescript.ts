@@ -32,14 +32,14 @@ export async function loadTSPlugins(pluginsDir: string): Promise<LoadedPlugin[]>
       const definition = mod.default ?? mod;
 
       if (!isPluginDefinition(definition)) {
-        console.warn(`[PluginLoader] "${file}" does not export a valid PluginDefinition. Skipping.`);
+        process.stderr.write(`[PluginLoader] "${file}" does not export a valid PluginDefinition. Skipping.\n`);
         continue;
       }
 
       loaded.push({ name: definition.name, type: "typescript", definition });
       process.stderr.write(`[plugin] Loaded TS plugin: ${definition.name}\n`);
     } catch (err) {
-      console.error(`[PluginLoader] Failed to load "${file}":`, err);
+      process.stderr.write(`[PluginLoader] Failed to load "${file}": ${err instanceof Error ? err.message : err}\n`);
     }
   }
 

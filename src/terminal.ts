@@ -22,6 +22,11 @@ function displayWidth(str: string): number {
   return width;
 }
 
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
 export class Terminal {
   private _rows: number = 24;
   private _cols: number = 80;
@@ -69,16 +74,56 @@ export class Terminal {
 
   writeLine(row: number, content: string): void {
     this.moveCursor(row, 1);
+
+    // 表示幅は ANSI コードを除いて計算
+    const plain = stripAnsi(content);
+    let displayW = 0;
+    let charCount = 0;
+    for (const char of plain) {
+      const cw = displayWidth(char);
+      if (displayW + cw > this._cols) break;
+      displayW += cw;
+      charCount++;
+    }
+
+    // content（ANSI込み）をそのまま出力してパディング
+    const visibleContent = this.truncateToWidth(content, this._cols);
+    const plainVisible = stripAnsi(visibleContent);
+    let plainW = 0;
+    for (const char of plainVisible) {
+      plainW += displayWidth(char);
+    }
+
+    process.stdout.write(visibleContent + " ".repeat(Math.max(0, this._cols - plainW)));
+  }
+
+  private truncateToWidth(str: string, maxWidth: number): string {
     let result = "";
     let w = 0;
-    for (const char of content) {
-      const cw = displayWidth(char);
-      if (w + cw > this._cols) break;
-      result += char;
-      w += cw;
+    let i = 0;
+    let inAnsi = false;
+
+    while (i < str.length) {
+      if (!inAnsi && str[i] === "\x1b" && str[i + 1] === "[") {
+        inAnsi = true;
+        result += str[i];
+        i++;
+      } else if (inAnsi) {
+        result += str[i];
+        if (str[i] === "m") inAnsi = false;
+        i++;
+      } else {
+        const codePoint = str.codePointAt(i);
+        if (codePoint === undefined) break;
+        const char = String.fromCodePoint(codePoint);
+        const cw = displayWidth(char);
+        if (w + cw > maxWidth) break;
+        result += char;
+        w += cw;
+        i += codePoint > 0xFFFF ? 2 : 1;
+      }
     }
-    const padded = result + " ".repeat(Math.max(0, this._cols - w));
-    process.stdout.write(padded);
+    return result;
   }
 
   readKey(): Promise<string> {

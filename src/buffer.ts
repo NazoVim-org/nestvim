@@ -43,17 +43,27 @@ export class TextBuffer {
   }
 
   async loadFile(path: string): Promise<void> {
-    const file = Bun.file(path);
-    const content = await file.text();
-    this.doc = Text.of(content.split("\n"));
-    this.filePath = path;
-    this.dirty = false;
+    try {
+      const file = Bun.file(path);
+      const content = await file.text();
+      const newDoc = Text.of(content.split("\n"));
+      this.doc = newDoc;
+      this.filePath = path;
+      this.dirty = false;
+    } catch (e) {
+      throw e;
+    }
   }
 
   async saveFile(): Promise<void> {
     if (!this.filePath) throw new Error("No file path set");
-    await Bun.write(this.filePath, this.toString());
-    this.dirty = false;
+    try {
+      await Bun.write(this.filePath, this.toString());
+      this.dirty = false;
+    } catch (e) {
+      this.dirty = true;
+      throw e;
+    }
   }
 
   mergeWithPrevLine(line: number): number {

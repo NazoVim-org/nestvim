@@ -2,12 +2,15 @@ import { Terminal } from "./terminal";
 import { TextBuffer } from "./buffer";
 import { Renderer } from "./renderer";
 import { PluginManager } from "./plugin/manager";
+import { Highlighter } from "./highlight/highlighter";
+import { detectLanguage } from "./highlight/detector";
 import type { EditorState, Mode } from "./types";
 
 export class Editor {
   private terminal = new Terminal();
   private buffer = new TextBuffer();
-  private renderer = new Renderer(this.terminal);
+  private highlighter = new Highlighter();
+  private renderer = new Renderer(this.terminal, this.highlighter);
   private pluginManager = new PluginManager(
     () => this.buffer,
     () => this.state
@@ -29,6 +32,11 @@ export class Editor {
       this.renderer.resetScroll();
     }
 
+    // Highlighter 初期化 + 言語設定
+    await this.highlighter.init();
+    this.highlighter.setLanguage(detectLanguage(this.state.filePath));
+    this.highlighter.markDirty();
+
     await this.pluginManager.loadAll();
 
     this.terminal.enableRawMode();
@@ -43,6 +51,7 @@ export class Editor {
     try {
       while (this.running) {
         this.state.dirty = this.buffer.dirty;
+        await this.highlighter.update(this.buffer.toString());
         this.renderer.render(this.buffer, this.state);
         this.terminal.showCursor();
 
@@ -127,11 +136,13 @@ export class Editor {
         this.buffer.delete(cursor.line, cursor.col - 1);
         cursor.col--;
         await this.pluginManager.emit("buffer:change", { buffer: this.buffer });
+        this.highlighter.markDirty();
       } else if (cursor.line > 1) {
         const newCol = this.buffer.mergeWithPrevLine(cursor.line);
         cursor.line--;
         cursor.col = newCol;
         await this.pluginManager.emit("buffer:change", { buffer: this.buffer });
+        this.highlighter.markDirty();
       }
       return;
     }
@@ -141,12 +152,14 @@ export class Editor {
       cursor.line++;
       cursor.col = 0;
       await this.pluginManager.emit("buffer:change", { buffer: this.buffer });
+      this.highlighter.markDirty();
       return;
     }
 
     this.buffer.insert(cursor.line, cursor.col, key);
     cursor.col++;
     await this.pluginManager.emit("buffer:change", { buffer: this.buffer });
+    this.highlighter.markDirty();
   }
 
   private async handleCommand(key: string): Promise<void> {

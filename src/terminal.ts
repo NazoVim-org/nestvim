@@ -75,17 +75,6 @@ export class Terminal {
   writeLine(row: number, content: string): void {
     this.moveCursor(row, 1);
 
-    // 表示幅は ANSI コードを除いて計算
-    const plain = stripAnsi(content);
-    let displayW = 0;
-    let charCount = 0;
-    for (const char of plain) {
-      const cw = displayWidth(char);
-      if (displayW + cw > this._cols) break;
-      displayW += cw;
-      charCount++;
-    }
-
     // content（ANSI込み）をそのまま出力してパディング
     const visibleContent = this.truncateToWidth(content, this._cols);
     const plainVisible = stripAnsi(visibleContent);

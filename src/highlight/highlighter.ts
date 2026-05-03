@@ -6,6 +6,8 @@ export class Highlighter {
   private cache: HighlightedDoc = new Map();
   private dirty = true;
   private currentLang: LanguageId = "unknown";
+  private failureCount = 0;
+  private static readonly MAX_FAILURES = 3;
 
   async init(): Promise<void> {
     await initParser();
@@ -15,11 +17,13 @@ export class Highlighter {
     if (this.currentLang !== langId) {
       this.currentLang = langId;
       this.dirty = true;
+      this.failureCount = 0;
     }
   }
 
   markDirty(): void {
     this.dirty = true;
+    this.failureCount = 0;
   }
 
   getCache(): HighlightedDoc {
@@ -42,6 +46,11 @@ export class Highlighter {
 
     try {
       const tree = parser.parse(text);
+      if (!tree) {
+        this.dirty = false;
+        this.failureCount = 0;
+        return;
+      }
       const newCache: HighlightedDoc = new Map();
 
       // BFS でツリーを走査してリーフノードを収集
@@ -75,10 +84,15 @@ export class Highlighter {
 
       this.cache = newCache;
       this.dirty = false;
+      this.failureCount = 0;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       process.stderr.write(`[highlight] Failed to parse text: ${message}\n`);
-      this.dirty = true; // Retry on next update
+      this.failureCount++;
+      if (this.failureCount >= Highlighter.MAX_FAILURES) {
+        this.dirty = false; // Give up after max failures
+        this.failureCount = 0;
+      }
     }
   }
 }

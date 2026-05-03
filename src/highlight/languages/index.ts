@@ -12,9 +12,8 @@ const WASM_PATHS: Partial<Record<LanguageId, string>> = {
   html:       "tree-sitter-html/tree-sitter-html.wasm",
   css:        "tree-sitter-css/tree-sitter-css.wasm",
   json:       "tree-sitter-json/tree-sitter-json.wasm",
-  // markdown と lua は WASM ファイルがないため一時的に無効化
-  // markdown:   "tree-sitter-markdown/tree-sitter-markdown.wasm",
-  // lua:        "tree-sitter-lua/tree-sitter-lua.wasm",
+  lua:        "@tree-sitter-grammars/tree-sitter-lua/tree-sitter-lua.wasm",
+  markdown:   "@tree-sitter-grammars/tree-sitter-markdown/tree-sitter-markdown.wasm",
 };
 
 const parserCache = new Map<LanguageId, Parser>();

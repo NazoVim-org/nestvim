@@ -23,7 +23,7 @@ jobs:
           node-version: lts/*
 
       - name: Install commitlint
-        run: npm install -D @commitlint/cli @commitlint/config-conventional
+        run: npm install --no-save @commitlint/cli @commitlint/config-conventional --legacy-peer-deps
 
       - name: Validate PR title
         env:

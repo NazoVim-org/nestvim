@@ -5,7 +5,12 @@
   "main": "src/main.ts",
   "scripts": {
     "start": "bun run src/main.ts",
-    "dev": "bun --watch src/main.ts"
+    "dev": "bun --watch src/main.ts",
+    "lint": "biome ci .",
+    "format": "biome format --write .",
+    "check": "biome check --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@codemirror/state": "^6.0.0",

@@ -1,2 +1,2 @@
-# Nazo-editor
-Nazo-editor is cli editor
+# nestvim
+nestvim is cli editor

@@ -17,7 +17,7 @@
           default = pkgs.mkShell {
             nativeBuildInputs = [
               bun
-              pkgs.nodePackages.typescript
+              pkgs.typescript
             ];
 
             shellHook = ''

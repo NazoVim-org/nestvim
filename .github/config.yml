@@ -1,8 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: "Discussions"
-    url: https://github.com/NazoVim-org/nestvim/discussions
-    about: "Ask questions, share ideas, and discuss configuration"
-  - name: "Security Vulnerability"
-    url: https://github.com/NazoVim-org/nestvim/security/advisories/new
-    about: "Report security vulnerabilities privately"

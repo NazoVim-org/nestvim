@@ -27,7 +27,7 @@ jobs:
           node-version: lts/*
 
       - name: Install commitlint
-        run: npm install -D @commitlint/cli @commitlint/config-conventional
+        run: npm install -D @commitlint/cli @commitlint/config-conventional --legacy-peer-deps
 
       - name: Validate current commit (last commit) with commitlint
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'

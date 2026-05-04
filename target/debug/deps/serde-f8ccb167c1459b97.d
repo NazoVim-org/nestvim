@@ -1,0 +1,14 @@
+/home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/deps/serde-f8ccb167c1459b97.d: /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/build/serde-9950e59800a5fb66/out/private.rs
+
+/home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/deps/libserde-f8ccb167c1459b97.rlib: /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/build/serde-9950e59800a5fb66/out/private.rs
+
+/home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/deps/libserde-f8ccb167c1459b97.rmeta: /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/build/serde-9950e59800a5fb66/out/private.rs
+
+/home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/build/serde-9950e59800a5fb66/out/private.rs:
+
+# env-dep:OUT_DIR=/home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/build/serde-9950e59800a5fb66/out

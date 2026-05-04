@@ -1,0 +1,14 @@
+/home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/deps/thiserror-5d7b62e1af5d853f.d: /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/build/thiserror-e5a3aae9ec82b6a6/out/private.rs
+
+/home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/deps/libthiserror-5d7b62e1af5d853f.rlib: /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/build/thiserror-e5a3aae9ec82b6a6/out/private.rs
+
+/home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/deps/libthiserror-5d7b62e1af5d853f.rmeta: /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/build/thiserror-e5a3aae9ec82b6a6/out/private.rs
+
+/home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs:
+/home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs:
+/home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs:
+/home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs:
+/home/nazozokc/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs:
+/home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/build/thiserror-e5a3aae9ec82b6a6/out/private.rs:
+
+# env-dep:OUT_DIR=/home/nazozokc/ghq/github.com/NazoVim-org/nestvim/target/debug/build/thiserror-e5a3aae9ec82b6a6/out

@@ -17,6 +17,7 @@ Cargo.lock
 # Editors
 *.swp
 *.swo
+*.exe
 
 # OS
 .DS_Store

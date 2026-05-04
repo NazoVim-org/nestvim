@@ -1,23 +1,23 @@
-import { readdir, readFile } from "fs/promises";
-import { join, resolve } from "path";
+import { readdir, readFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { LuaFactory } from "wasmoon";
 import type { LoadedPlugin, PluginAPI, PluginDefinition } from "../types";
 
 function bridgeAPI(lua: Awaited<ReturnType<LuaFactory["createEngine"]>>, api: PluginAPI): object {
   const bridged = {
     on: (event: string, handler: () => void) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: Lua interop requires type erasure
       api.on(event as any, handler as any);
     },
     off: (event: string, handler: () => void) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: Lua interop requires type erasure
       api.off(event as any, handler as any);
     },
     addCommand: (name: string, handler: () => void) => {
       api.addCommand(name, handler);
     },
     addKeymap: (mode: string, key: string, handler: () => void) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: Lua interop requires type erasure
       api.addKeymap(mode as any, key, handler);
     },
     log: (message: string) => {

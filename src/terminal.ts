@@ -23,8 +23,8 @@ function displayWidth(str: string): number {
 }
 
 function stripAnsi(str: string): string {
-  // eslint-disable-next-line no-control-regex
-  return str.replace(/\x1b\[[0-9;]*m/g, "");
+  const ESC = "\x1b";
+  return str.replace(new RegExp(`${ESC}\\[[0-9;]*m`, "g"), "");
 }
 
 export class Terminal {

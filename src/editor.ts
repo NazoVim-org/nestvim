@@ -4,7 +4,7 @@ import { Highlighter } from "./highlight/highlighter";
 import { PluginManager } from "./plugin/manager";
 import { Renderer } from "./renderer";
 import { Terminal } from "./terminal";
-import type { EditorState, Mode } from "./types";
+import type { EditorState } from "./types";
 
 export class Editor {
   private terminal = new Terminal();

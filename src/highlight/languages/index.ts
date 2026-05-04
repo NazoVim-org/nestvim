@@ -1,4 +1,4 @@
-import { join } from "path";
+import { join } from "node:path";
 import { Language, Parser } from "web-tree-sitter";
 import type { LanguageId } from "../types";
 
@@ -35,10 +35,14 @@ export async function getParser(langId: LanguageId): Promise<Parser | null> {
   await initParser();
 
   if (langId === "unknown") return null;
-  if (parserCache.has(langId)) return parserCache.get(langId)!;
+  if (parserCache.has(langId)) {
+    const parser = parserCache.get(langId);
+    if (parser) return parser;
+  }
 
   if (loadingPromises.has(langId)) {
-    return loadingPromises.get(langId)!;
+    const promise = loadingPromises.get(langId);
+    if (promise) return promise;
   }
 
   const wasmRelPath = WASM_PATHS[langId];

@@ -10,7 +10,7 @@ export class KeymapRegistry {
     if (!this.keymaps.has(mode)) {
       this.keymaps.set(mode, new Map());
     }
-    this.keymaps.get(mode)!.set(key, handler);
+    this.keymaps.get(mode)?.set(key, handler);
   }
 
   async handle(mode: EditorState["mode"], key: string): Promise<boolean> {

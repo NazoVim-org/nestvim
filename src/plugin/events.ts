@@ -1,16 +1,16 @@
-import type { EditorEventMap, EditorEventName, EditorEventPayload } from "./types";
+import type { EditorEventName, EditorEventPayload } from "./types";
 
 type Handler<T extends EditorEventName> = (payload: EditorEventPayload<T>) => void;
 
 export class EventEmitter {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: EventEmitter handles multiple event types with type erasure
   private listeners = new Map<EditorEventName, Set<Handler<any>>>();
 
   on<T extends EditorEventName>(event: T, handler: Handler<T>): void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
-    this.listeners.get(event)!.add(handler);
+    this.listeners.get(event)?.add(handler);
   }
 
   off<T extends EditorEventName>(event: T, handler: Handler<T>): void {

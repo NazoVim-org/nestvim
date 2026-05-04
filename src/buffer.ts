@@ -43,16 +43,12 @@ export class TextBuffer {
   }
 
   async loadFile(path: string): Promise<void> {
-    try {
-      const file = Bun.file(path);
-      const content = await file.text();
-      const newDoc = Text.of(content.split("\n"));
-      this.doc = newDoc;
-      this.filePath = path;
-      this.dirty = false;
-    } catch (e) {
-      throw e;
-    }
+    const file = Bun.file(path);
+    const content = await file.text();
+    const newDoc = Text.of(content.split("\n"));
+    this.doc = newDoc;
+    this.filePath = path;
+    this.dirty = false;
   }
 
   async saveFile(): Promise<void> {

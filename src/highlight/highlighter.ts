@@ -1,5 +1,5 @@
 import { getParser, initParser } from "./languages/index";
-import { RESET, THEME } from "./theme";
+import { THEME } from "./theme";
 import type { HighlightedDoc, LanguageId } from "./types";
 
 export class Highlighter {
@@ -71,7 +71,7 @@ export class Highlighter {
               const spanEnd = lineNo === endLine ? node.endPosition.column : Infinity;
 
               if (!newCache.has(lineNo)) newCache.set(lineNo, []);
-              newCache.get(lineNo)!.push({ start: spanStart, end: spanEnd, ansi });
+              newCache.get(lineNo)?.push({ start: spanStart, end: spanEnd, ansi });
             }
           }
         } else {

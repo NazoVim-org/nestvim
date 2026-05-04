@@ -1,5 +1,5 @@
-import { readdir } from "fs/promises";
-import { join, resolve } from "path";
+import { readdir } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import type { LoadedPlugin, PluginDefinition } from "../types";
 
 function isPluginDefinition(obj: unknown): obj is PluginDefinition {

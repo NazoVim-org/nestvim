@@ -1,4 +1,4 @@
-import { join } from "path";
+import { join } from "node:path";
 import type { TextBuffer } from "../buffer";
 import type { EditorState } from "../types";
 import { PluginAPIImpl } from "./api";
@@ -16,10 +16,7 @@ export class PluginManager {
   private plugins: LoadedPlugin[] = [];
   private api: PluginAPIImpl;
 
-  constructor(
-    private getBuffer: () => TextBuffer,
-    private getState: () => EditorState,
-  ) {
+  constructor(getBuffer: () => TextBuffer, getState: () => EditorState) {
     this.api = new PluginAPIImpl(this.emitter, this.commands, this.keymaps, getBuffer, getState);
   }
 

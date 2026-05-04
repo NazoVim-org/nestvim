@@ -1,6 +1,6 @@
+import { getParser, initParser } from "./languages/index";
+import { RESET, THEME } from "./theme";
 import type { HighlightedDoc, LanguageId } from "./types";
-import { THEME, RESET } from "./theme";
-import { initParser, getParser } from "./languages/index";
 
 export class Highlighter {
   private cache: HighlightedDoc = new Map();
@@ -64,11 +64,11 @@ export class Highlighter {
           if (ansi) {
             // ノードが複数行にまたがる場合は行ごとに分割
             const startLine = node.startPosition.row + 1; // 1-indexed
-            const endLine   = node.endPosition.row + 1;
+            const endLine = node.endPosition.row + 1;
 
             for (let lineNo = startLine; lineNo <= endLine; lineNo++) {
               const spanStart = lineNo === startLine ? node.startPosition.column : 0;
-              const spanEnd   = lineNo === endLine   ? node.endPosition.column   : Infinity;
+              const spanEnd = lineNo === endLine ? node.endPosition.column : Infinity;
 
               if (!newCache.has(lineNo)) newCache.set(lineNo, []);
               newCache.get(lineNo)!.push({ start: spanStart, end: spanEnd, ansi });

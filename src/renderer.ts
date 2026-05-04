@@ -1,16 +1,16 @@
-import { Terminal } from "./terminal";
-import { TextBuffer } from "./buffer";
-import type { EditorState } from "./types";
+import type { TextBuffer } from "./buffer";
 import type { Highlighter } from "./highlight/highlighter";
-import type { HighlightedLine } from "./highlight/types";
 import { RESET } from "./highlight/theme";
+import type { HighlightedLine } from "./highlight/types";
+import type { Terminal } from "./terminal";
+import type { EditorState } from "./types";
 
 export class Renderer {
   private scrollTop = 1;
 
   constructor(
     private terminal: Terminal,
-    private highlighter?: Highlighter
+    private highlighter?: Highlighter,
   ) {}
 
   resetScroll(): void {
@@ -36,9 +36,7 @@ export class Renderer {
       const displayText = isTildeRow ? "~" : rawLine;
 
       const spans = hlCache?.get(bufLine);
-      const colored = (spans && !isTildeRow)
-        ? applySpans(displayText, spans)
-        : displayText;
+      const colored = spans && !isTildeRow ? applySpans(displayText, spans) : displayText;
 
       this.terminal.writeLine(i + 1, colored);
     }
@@ -64,10 +62,7 @@ function applySpans(line: string, spans: HighlightedLine): string {
 
   for (const span of sorted) {
     const start = span.start;
-    const end = Math.min(
-      span.end === Infinity ? chars.length : span.end,
-      chars.length
-    );
+    const end = Math.min(span.end === Infinity ? chars.length : span.end, chars.length);
 
     if (col < start) {
       result += chars.slice(col, start).join("");

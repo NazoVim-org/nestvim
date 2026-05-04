@@ -1,6 +1,6 @@
 import { readdir } from "fs/promises";
 import { join, resolve } from "path";
-import type { PluginDefinition, LoadedPlugin } from "../types";
+import type { LoadedPlugin, PluginDefinition } from "../types";
 
 function isPluginDefinition(obj: unknown): obj is PluginDefinition {
   return (
@@ -21,9 +21,7 @@ export async function loadTSPlugins(pluginsDir: string): Promise<LoadedPlugin[]>
     return [];
   }
 
-  const tsFiles = files.filter(
-    (f) => f.endsWith(".ts") && !f.endsWith(".d.ts")
-  );
+  const tsFiles = files.filter((f) => f.endsWith(".ts") && !f.endsWith(".d.ts"));
 
   for (const file of tsFiles) {
     const filePath = resolve(join(pluginsDir, file));
@@ -32,14 +30,18 @@ export async function loadTSPlugins(pluginsDir: string): Promise<LoadedPlugin[]>
       const definition = mod.default ?? mod;
 
       if (!isPluginDefinition(definition)) {
-        process.stderr.write(`[PluginLoader] "${file}" does not export a valid PluginDefinition. Skipping.\n`);
+        process.stderr.write(
+          `[PluginLoader] "${file}" does not export a valid PluginDefinition. Skipping.\n`,
+        );
         continue;
       }
 
       loaded.push({ name: definition.name, type: "typescript", definition });
       process.stderr.write(`[plugin] Loaded TS plugin: ${definition.name}\n`);
     } catch (err) {
-      process.stderr.write(`[PluginLoader] Failed to load "${file}": ${err instanceof Error ? err.message : err}\n`);
+      process.stderr.write(
+        `[PluginLoader] Failed to load "${file}": ${err instanceof Error ? err.message : err}\n`,
+      );
     }
   }
 

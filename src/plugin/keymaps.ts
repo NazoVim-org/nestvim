@@ -6,11 +6,7 @@ type ModeKeymaps = Map<string, KeymapHandler>;
 export class KeymapRegistry {
   private keymaps = new Map<EditorState["mode"], ModeKeymaps>();
 
-  register(
-    mode: EditorState["mode"],
-    key: string,
-    handler: KeymapHandler
-  ): void {
+  register(mode: EditorState["mode"], key: string, handler: KeymapHandler): void {
     if (!this.keymaps.has(mode)) {
       this.keymaps.set(mode, new Map());
     }

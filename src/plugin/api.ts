@@ -1,9 +1,9 @@
-import type { PluginAPI, EditorEventName, EditorEventPayload } from "./types";
 import type { TextBuffer } from "../buffer";
 import type { EditorState } from "../types";
-import { EventEmitter } from "./events";
-import { CommandRegistry } from "./commands";
-import { KeymapRegistry } from "./keymaps";
+import type { CommandRegistry } from "./commands";
+import type { EventEmitter } from "./events";
+import type { KeymapRegistry } from "./keymaps";
+import type { EditorEventName, EditorEventPayload, PluginAPI } from "./types";
 
 export class PluginAPIImpl implements PluginAPI {
   constructor(
@@ -11,19 +11,16 @@ export class PluginAPIImpl implements PluginAPI {
     private commands: CommandRegistry,
     private keymaps: KeymapRegistry,
     private getBufferFn: () => TextBuffer,
-    private getStateFn: () => EditorState
+    private getStateFn: () => EditorState,
   ) {}
 
-  on<T extends EditorEventName>(
-    event: T,
-    handler: (payload: EditorEventPayload<T>) => void
-  ): void {
+  on<T extends EditorEventName>(event: T, handler: (payload: EditorEventPayload<T>) => void): void {
     this.emitter.on(event, handler);
   }
 
   off<T extends EditorEventName>(
     event: T,
-    handler: (payload: EditorEventPayload<T>) => void
+    handler: (payload: EditorEventPayload<T>) => void,
   ): void {
     this.emitter.off(event, handler);
   }
@@ -32,11 +29,7 @@ export class PluginAPIImpl implements PluginAPI {
     this.commands.register(name, handler);
   }
 
-  addKeymap(
-    mode: EditorState["mode"],
-    key: string,
-    handler: () => void | Promise<void>
-  ): void {
+  addKeymap(mode: EditorState["mode"], key: string, handler: () => void | Promise<void>): void {
     this.keymaps.register(mode, key, handler);
   }
 

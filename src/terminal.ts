@@ -31,8 +31,12 @@ export class Terminal {
   private _rows: number = 24;
   private _cols: number = 80;
 
-  get rows() { return this._rows; }
-  get cols() { return this._cols; }
+  get rows() {
+    return this._rows;
+  }
+  get cols() {
+    return this._cols;
+  }
 
   enableRawMode(): void {
     process.stdin.setRawMode(true);
@@ -109,7 +113,7 @@ export class Terminal {
         if (w + cw > maxWidth) break;
         result += char;
         w += cw;
-        i += codePoint > 0xFFFF ? 2 : 1;
+        i += codePoint > 0xffff ? 2 : 1;
       }
     }
     return result;

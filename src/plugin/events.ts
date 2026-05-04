@@ -1,12 +1,6 @@
-import type {
-  EditorEventMap,
-  EditorEventName,
-  EditorEventPayload,
-} from "./types";
+import type { EditorEventMap, EditorEventName, EditorEventPayload } from "./types";
 
-type Handler<T extends EditorEventName> = (
-  payload: EditorEventPayload<T>
-) => void;
+type Handler<T extends EditorEventName> = (payload: EditorEventPayload<T>) => void;
 
 export class EventEmitter {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -23,10 +17,7 @@ export class EventEmitter {
     this.listeners.get(event)?.delete(handler);
   }
 
-  async emit<T extends EditorEventName>(
-    event: T,
-    payload: EditorEventPayload<T>
-  ): Promise<void> {
+  async emit<T extends EditorEventName>(event: T, payload: EditorEventPayload<T>): Promise<void> {
     const handlers = this.listeners.get(event);
     if (!handlers) return;
     for (const handler of handlers) {

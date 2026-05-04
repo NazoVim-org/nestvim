@@ -1,19 +1,19 @@
-import { Parser, Language } from "web-tree-sitter";
 import { join } from "path";
+import { Language, Parser } from "web-tree-sitter";
 import type { LanguageId } from "../types";
 
 // node_modules 内の WASM ファイルの相対パス
 const WASM_PATHS: Partial<Record<LanguageId, string>> = {
   typescript: "tree-sitter-typescript/tree-sitter-typescript.wasm",
-  python:     "tree-sitter-python/tree-sitter-python.wasm",
-  rust:       "tree-sitter-rust/tree-sitter-rust.wasm",
-  go:         "tree-sitter-go/tree-sitter-go.wasm",
-  c:          "tree-sitter-c/tree-sitter-c.wasm",
-  html:       "tree-sitter-html/tree-sitter-html.wasm",
-  css:        "tree-sitter-css/tree-sitter-css.wasm",
-  json:       "tree-sitter-json/tree-sitter-json.wasm",
-  lua:        "@tree-sitter-grammars/tree-sitter-lua/tree-sitter-lua.wasm",
-  markdown:   "@tree-sitter-grammars/tree-sitter-markdown/tree-sitter-markdown.wasm",
+  python: "tree-sitter-python/tree-sitter-python.wasm",
+  rust: "tree-sitter-rust/tree-sitter-rust.wasm",
+  go: "tree-sitter-go/tree-sitter-go.wasm",
+  c: "tree-sitter-c/tree-sitter-c.wasm",
+  html: "tree-sitter-html/tree-sitter-html.wasm",
+  css: "tree-sitter-css/tree-sitter-css.wasm",
+  json: "tree-sitter-json/tree-sitter-json.wasm",
+  lua: "@tree-sitter-grammars/tree-sitter-lua/tree-sitter-lua.wasm",
+  markdown: "@tree-sitter-grammars/tree-sitter-markdown/tree-sitter-markdown.wasm",
 };
 
 const parserCache = new Map<LanguageId, Parser>();

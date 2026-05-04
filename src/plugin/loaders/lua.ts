@@ -3,10 +3,7 @@ import { join, resolve } from "path";
 import { LuaFactory } from "wasmoon";
 import type { LoadedPlugin, PluginAPI, PluginDefinition } from "../types";
 
-function bridgeAPI(
-  lua: Awaited<ReturnType<LuaFactory["createEngine"]>>,
-  api: PluginAPI
-): object {
+function bridgeAPI(lua: Awaited<ReturnType<LuaFactory["createEngine"]>>, api: PluginAPI): object {
   const bridged = {
     on: (event: string, handler: () => void) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,10 +28,7 @@ function bridgeAPI(
   return bridged;
 }
 
-export async function loadLuaPlugins(
-  pluginsDir: string,
-  api: PluginAPI
-): Promise<LoadedPlugin[]> {
+export async function loadLuaPlugins(pluginsDir: string, api: PluginAPI): Promise<LoadedPlugin[]> {
   const loaded: LoadedPlugin[] = [];
   const factory = new LuaFactory();
 
@@ -63,9 +57,7 @@ export async function loadLuaPlugins(
           : file.replace(".lua", "");
 
       const setupFn: unknown =
-        typeof result === "object" && result !== null && "setup" in result
-          ? result.setup
-          : null;
+        typeof result === "object" && result !== null && "setup" in result ? result.setup : null;
 
       if (typeof setupFn === "function") {
         await setupFn(bridged);
@@ -79,7 +71,9 @@ export async function loadLuaPlugins(
       loaded.push({ name, type: "lua", definition });
       process.stderr.write(`[plugin] Loaded Lua plugin: ${name}\n`);
     } catch (err) {
-      process.stderr.write(`[PluginLoader] Failed to load "${file}": ${err instanceof Error ? err.message : err}\n`);
+      process.stderr.write(
+        `[PluginLoader] Failed to load "${file}": ${err instanceof Error ? err.message : err}\n`,
+      );
     }
   }
 

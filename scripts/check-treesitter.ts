@@ -1,4 +1,4 @@
-import { Parser, Language } from "web-tree-sitter";
+import { Language, Parser } from "web-tree-sitter";
 
 await Parser.init();
 const parser = new Parser();

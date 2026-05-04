@@ -14,23 +14,13 @@ export type EditorEventName = keyof EditorEventMap;
 export type EditorEventPayload<T extends EditorEventName> = EditorEventMap[T];
 
 export interface PluginAPI {
-  on<T extends EditorEventName>(
-    event: T,
-    handler: (payload: EditorEventPayload<T>) => void
-  ): void;
+  on<T extends EditorEventName>(event: T, handler: (payload: EditorEventPayload<T>) => void): void;
 
-  off<T extends EditorEventName>(
-    event: T,
-    handler: (payload: EditorEventPayload<T>) => void
-  ): void;
+  off<T extends EditorEventName>(event: T, handler: (payload: EditorEventPayload<T>) => void): void;
 
   addCommand(name: string, handler: () => void | Promise<void>): void;
 
-  addKeymap(
-    mode: EditorState["mode"],
-    key: string,
-    handler: () => void | Promise<void>
-  ): void;
+  addKeymap(mode: EditorState["mode"], key: string, handler: () => void | Promise<void>): void;
 
   getBuffer(): Readonly<TextBuffer>;
 

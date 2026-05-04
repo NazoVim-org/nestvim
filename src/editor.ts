@@ -1,9 +1,9 @@
-import { Terminal } from "./terminal";
 import { TextBuffer } from "./buffer";
-import { Renderer } from "./renderer";
-import { PluginManager } from "./plugin/manager";
-import { Highlighter } from "./highlight/highlighter";
 import { detectLanguage } from "./highlight/detector";
+import { Highlighter } from "./highlight/highlighter";
+import { PluginManager } from "./plugin/manager";
+import { Renderer } from "./renderer";
+import { Terminal } from "./terminal";
 import type { EditorState, Mode } from "./types";
 
 export class Editor {
@@ -13,7 +13,7 @@ export class Editor {
   private renderer = new Renderer(this.terminal, this.highlighter);
   private pluginManager = new PluginManager(
     () => this.buffer,
-    () => this.state
+    () => this.state,
   );
   private state: EditorState = {
     mode: "normal",
@@ -46,7 +46,10 @@ export class Editor {
     await this.pluginManager.emit("editor:ready", undefined);
 
     process.on("exit", () => this.cleanup());
-    process.on("SIGINT", () => { this.cleanup(); process.exit(0); });
+    process.on("SIGINT", () => {
+      this.cleanup();
+      process.exit(0);
+    });
 
     try {
       while (this.running) {
@@ -65,9 +68,15 @@ export class Editor {
 
   private async handleKey(key: string): Promise<void> {
     switch (this.state.mode) {
-      case "normal": await this.handleNormal(key); break;
-      case "insert": await this.handleInsert(key); break;
-      case "command": await this.handleCommand(key); break;
+      case "normal":
+        await this.handleNormal(key);
+        break;
+      case "insert":
+        await this.handleInsert(key);
+        break;
+      case "command":
+        await this.handleCommand(key);
+        break;
     }
   }
 
@@ -80,7 +89,9 @@ export class Editor {
     const lineCount = this.buffer.lineCount;
 
     switch (key) {
-      case "h": cursor.col = Math.max(0, cursor.col - 1); break;
+      case "h":
+        cursor.col = Math.max(0, cursor.col - 1);
+        break;
       case "l": {
         const lineLen = this.buffer.getLine(cursor.line).length;
         cursor.col = Math.min(lineLen > 0 ? lineLen - 1 : 0, cursor.col + 1);

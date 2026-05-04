@@ -1,0 +1,21 @@
+{
+  extends: ["config:recommended"],
+  timezone: "Etc/UTC",
+  labels: ["dependencies"],
+  dependencyDashboard: true,
+  prConcurrentLimit: 5,
+  packageRules: [
+    {
+      matchManagers: ["npm"],
+      rangeStrategy: "replace"
+    },
+    {
+      matchManagers: ["github-actions"],
+      groupName: "github-actions"
+    },
+    {
+      matchManagers: ["nix"],
+      enabled: true
+    }
+  ]
+}

@@ -10,49 +10,34 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        bun = pkgs.bun;
       in
       {
         devShells = {
           default = pkgs.mkShell {
             nativeBuildInputs = [
-              bun
-              pkgs.typescript
+              pkgs.rustc
+              pkgs.cargo
+              pkgs.rustfmt
+              pkgs.clippy
             ];
 
             shellHook = ''
               echo "nestvim development environment"
-              echo "Run 'bun install' to install dependencies"
-              echo "Run 'bun run start' to start the editor"
+              echo "Run 'cargo build' to build the project"
+              echo "Run 'cargo run -- [file]' to start the editor"
             '';
           };
         };
 
         packages = {
-          default = pkgs.stdenv.mkDerivation {
+          default = pkgs.rustPlatform.buildRustPackage {
             pname = "nestvim";
             version = "0.1.0";
             src = ./.;
 
-            nativeBuildInputs = [ bun ];
-
-            buildPhase = ''
-              runHook preBuild
-              bun install
-              runHook postBuild
-            '';
-
-            installPhase = ''
-              runHook preInstall
-              mkdir -p $out/bin
-              cp -r . $out/
-              cat > $out/bin/nestvim << EOF
-              #!/bin/sh
-              exec ${bun}/bin/bun run $out/src/main.ts "\$@"
-              EOF
-              chmod +x $out/bin/nestvim
-              runHook postInstall
-            '';
+            cargoLock = {
+              lockFile = ./Cargo.lock;
+            };
           };
         };
       }

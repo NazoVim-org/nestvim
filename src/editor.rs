@@ -84,6 +84,11 @@ impl Editor {
     
     pub async fn run(&mut self) -> io::Result<()> {
         self.running = true;
+
+        if let Err(e) = self.renderer.render(&mut self.terminal, &self.buffer, &self.state) {
+            eprintln!("[render] error: {}", e);
+        }
+        self.needs_render = false;
         
         let mut reader = EventStream::new();
         

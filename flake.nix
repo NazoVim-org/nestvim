@@ -6,8 +6,14 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
       in
@@ -16,6 +22,8 @@
           default = pkgs.mkShell {
             nativeBuildInputs = [
               pkgs.rustc
+              pkgs.claude-code
+              pkgs.opencode
               pkgs.cargo
               pkgs.rustfmt
               pkgs.clippy

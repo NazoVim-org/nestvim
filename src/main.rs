@@ -9,7 +9,6 @@ mod types;
 
 use crate::editor::Editor;
 use clap::Parser;
-use crossterm;
 
 #[derive(Parser)]
 #[command(name = "nestvim")]

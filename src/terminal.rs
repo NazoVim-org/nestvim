@@ -4,21 +4,23 @@ use crossterm::{
     execute,
     terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, size},
 };
+use std::collections::HashMap;
 use std::io::{self, stdout, Stdout, Write, BufWriter};
 
 pub struct Terminal {
     rows: u16,
     cols: u16,
     stdout: BufWriter<Stdout>,
+    line_cache: HashMap<String, String>,
 }
 
 impl Terminal {
     pub fn new() -> io::Result<Self> {
         match size() {
-            Ok((cols, rows)) => Ok(Self { rows, cols, stdout: BufWriter::new(stdout()) }),
+            Ok((cols, rows)) => Ok(Self { rows, cols, stdout: BufWriter::new(stdout()), line_cache: HashMap::new() }),
             Err(e) => {
                 eprintln!("Warning: Could not get terminal size: {}. Using defaults.", e);
-                Ok(Self { rows: 24, cols: 80, stdout: BufWriter::new(stdout()) })
+                Ok(Self { rows: 24, cols: 80, stdout: BufWriter::new(stdout()), line_cache: HashMap::new() })
             }
         }
     }
@@ -43,7 +45,12 @@ impl Terminal {
         if let Ok((cols, rows)) = size() {
             self.cols = cols;
             self.rows = rows;
+            self.line_cache.clear();
         }
+    }
+
+    pub fn clear_cache(&mut self) {
+        self.line_cache.clear();
     }
 
     pub fn rows(&self) -> u16 {
@@ -61,12 +68,21 @@ impl Terminal {
     pub fn write_line(&mut self, row: u16, content: &str) -> io::Result<()> {
         let cols = self.cols as usize;
 
-        let stripped = strip_ansi(content);
+        let stripped = if let Some(cached) = self.line_cache.get(content) {
+            cached.clone()
+        } else {
+            let s = strip_ansi(content);
+            if self.line_cache.len() < 500 {
+                self.line_cache.insert(content.to_string(), s.clone());
+            }
+            s
+        };
+
         let visible_width = stripped.chars().count();
         let padded = if visible_width < cols {
-            format!("{}{}", content, " ".repeat(cols - visible_width))
+            format!("{}{}", stripped, " ".repeat(cols - visible_width))
         } else {
-            content.chars().take(cols).collect()
+            stripped.chars().take(cols).collect()
         };
 
         execute!(self.stdout, MoveTo(0, row.saturating_sub(1)))?;

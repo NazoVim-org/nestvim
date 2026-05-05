@@ -8,7 +8,6 @@ use crate::types::{EditorState, Mode, PluginEvent, VisualType};
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
 use futures::StreamExt;
 use std::io;
-use tokio::time::{interval, Duration};
 
 pub struct Editor {
     terminal: Terminal,
@@ -86,9 +85,7 @@ impl Editor {
     pub async fn run(&mut self) -> io::Result<()> {
         self.running = true;
         
-        // Event loop
         let mut reader = EventStream::new();
-        let mut tick_interval = interval(Duration::from_millis(100));
         
         while self.running {
             self.state.dirty = self.buffer.dirty;
@@ -103,23 +100,19 @@ impl Editor {
                         }
                         Ok(Event::Resize(_, _)) => {
                             self.terminal.update_size();
+                            self.terminal.clear_cache();
                             self.needs_render = true;
                         }
                         _ => {}
                     }
                 }
-                _ = tick_interval.tick() => {
-                    // Periodic update if needed
-                }
             }
             
-            // Update highlighter only when buffer content changed
             if self.buffer.modification_count() > self.last_highlight_mod_count {
                 let _ = self.highlighter.update(&self.buffer.to_string(), self.state.file_path.as_deref());
                 self.last_highlight_mod_count = self.buffer.modification_count();
             }
             
-            // Render only when needed
             if self.needs_render {
                 if let Err(e) = self.renderer.render(&mut self.terminal, &self.buffer, &self.state) {
                     eprintln!("[render] error: {}", e);

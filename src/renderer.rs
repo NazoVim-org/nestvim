@@ -1,45 +1,39 @@
 use crate::buffer::TextBuffer;
 use crate::terminal::Terminal;
 use crate::types::{EditorState, Mode};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::io;
 
 pub struct Renderer {
     scroll_top: usize,
+    last_content_hash: u64,
+    last_line_count: usize,
+    last_status: String,
 }
 
 impl Renderer {
     pub fn new() -> Self {
-        Self { scroll_top: 1 }
+        Self {
+            scroll_top: 1,
+            last_content_hash: 0,
+            last_line_count: 0,
+            last_status: String::new(),
+        }
+    }
+
+    fn compute_hash(buffer: &TextBuffer) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        buffer.line_count().hash(&mut hasher);
+        buffer.to_string().hash(&mut hasher);
+        hasher.finish()
     }
 
     pub fn render(&mut self, terminal: &mut Terminal, buffer: &TextBuffer, state: &EditorState) -> io::Result<()> {
         let rows = terminal.rows().max(2);
         let visible_rows = (rows as usize).saturating_sub(2).max(1);
 
-        // Adjust scroll position
-        if state.cursor.line < self.scroll_top {
-            self.scroll_top = state.cursor.line;
-        } else if state.cursor.line >= self.scroll_top + visible_rows {
-            self.scroll_top = state.cursor.line - visible_rows + 1;
-        }
-
-        // Clear screen
-        terminal.clear_screen()?;
-
-        // Draw lines
-        for i in 0..visible_rows {
-            let buf_line = self.scroll_top + i;
-            let raw_line = buffer.get_line(buf_line);
-            let display_text = if raw_line.is_empty() && buf_line > buffer.line_count() && buffer.line_count() > 0 {
-                "~".to_string()
-            } else {
-                raw_line
-            };
-
-            terminal.write_line((i + 1) as u16, &display_text)?;
-        }
-
-        // Status line
+        let content_hash = Self::compute_hash(buffer);
         let status = if state.mode == Mode::Command {
             format!(":{}", state.command_buffer)
         } else {
@@ -50,9 +44,42 @@ impl Renderer {
                 if state.dirty { "[+]" } else { "" }
             )
         };
-        terminal.write_status(&status)?;
+        let needs_full_render = content_hash != self.last_content_hash
+            || self.last_line_count != buffer.line_count()
+            || status != self.last_status;
 
-        // Move cursor
+        if needs_full_render {
+            self.scroll_top = self.scroll_top.clamp(1, buffer.line_count().saturating_sub(visible_rows).max(1));
+        }
+
+        if state.cursor.line < self.scroll_top {
+            self.scroll_top = state.cursor.line;
+        } else if state.cursor.line >= self.scroll_top + visible_rows {
+            self.scroll_top = state.cursor.line - visible_rows + 1;
+        }
+
+        self.last_content_hash = content_hash;
+        self.last_line_count = buffer.line_count();
+
+        if needs_full_render {
+            terminal.clear_screen()?;
+
+            for i in 0..visible_rows {
+                let buf_line = self.scroll_top + i;
+                let raw_line = buffer.get_line(buf_line);
+                let display_text = if raw_line.is_empty() && buf_line > buffer.line_count() && buffer.line_count() > 0 {
+                    "~".to_string()
+                } else {
+                    raw_line
+                };
+
+                terminal.write_line((i + 1) as u16, &display_text)?;
+            }
+
+            terminal.write_status(&status)?;
+            self.last_status = status;
+        }
+
         let screen_row = (state.cursor.line.saturating_sub(self.scroll_top) + 1) as u16;
         terminal.move_cursor(screen_row, (state.cursor.col + 1) as u16)?;
         terminal.flush()

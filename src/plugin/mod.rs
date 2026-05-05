@@ -4,26 +4,24 @@ pub mod loaders;
 pub use api::{Plugin, PluginApi};
 
 use crate::types::{PluginEvent, NestvimError};
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 pub struct PluginManager {
     plugins: Vec<Box<dyn Plugin>>,
     api: Rc<PluginApi>,
+    registry: loaders::LoaderRegistry,
 }
 
 impl PluginManager {
     pub fn new() -> Self {
-        let api = Rc::new(PluginApi {
-            commands: Rc::new(RefCell::new(HashMap::new())),
-            event_handlers: Rc::new(RefCell::new(HashMap::new())),
-            log_fn: Box::new(|msg| eprintln!("[plugin] {}", msg)),
-        });
+        let api = Rc::new(PluginApi::new());
+
+        let registry = loaders::create_default_registry();
 
         Self {
             plugins: Vec::new(),
             api,
+            registry,
         }
     }
 
@@ -39,6 +37,7 @@ impl PluginManager {
                 });
             config_dir.join("nestvim").join("plugins")
         };
+
         if !plugins_dir.exists() {
             return Ok(());
         }
@@ -49,20 +48,17 @@ impl PluginManager {
         for entry in entries {
             let entry = entry.map_err(NestvimError::Io)?;
             let path = entry.path();
-                let ext = path.extension();
-                if ext == Some(std::ffi::OsStr::new("lua")) {
-                    // Lua loader temporarily disabled
-                    eprintln!("[plugin] Lua loader disabled");
-                } else if ext == Some(std::ffi::OsStr::new("lisp")) {
-                    match crate::plugin::loaders::lisp::load_lisp_plugin(&path, self.api.clone()) {
-                        Ok(plugin) => {
-                            let name = plugin.name().to_string();
-                            self.add_plugin(plugin);
-                            eprintln!("[plugin] Loaded Lisp plugin: {}", name);
-                        }
-                        Err(e) => eprintln!("[plugin] Failed to load {}: {}", path.display(), e),
-                    }
+            
+            match self.registry.load(&path, self.api.clone()) {
+                Ok(plugin) => {
+                    let name = plugin.name().to_string();
+                    self.add_plugin(plugin);
+                    eprintln!("[plugin] Loaded: {}", name);
                 }
+                Err(e) => {
+                    eprintln!("[plugin] Failed to load {}: {}", path.display(), e);
+                }
+            }
         }
 
         Ok(())
@@ -73,14 +69,14 @@ impl PluginManager {
             plugin.handle_event(&event);
         }
 
-        let handlers = self.api.event_handlers.borrow();
+        let handlers = self.api.event_handlers();
         let event_name = match &event {
             PluginEvent::ModeChange { .. } => "mode_change",
             PluginEvent::BufferChange => "buffer_change",
             PluginEvent::Key { .. } => "key",
             PluginEvent::BufferSave { .. } => "buffer_save",
         };
-        if let Some(event_handlers) = handlers.get(event_name) {
+        if let Some(event_handlers) = handlers.borrow().get(event_name) {
             for handler in event_handlers {
                 handler(&event);
             }
@@ -94,8 +90,8 @@ impl PluginManager {
             }
         }
 
-        let commands = self.api.commands.borrow();
-        if let Some(f) = commands.get(cmd) {
+        let commands = self.api.commands();
+        if let Some(f) = commands.borrow().get(cmd) {
             f(vec![]);
             true
         } else {

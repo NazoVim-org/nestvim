@@ -5,33 +5,55 @@ use crate::types::PluginEvent;
 
 pub type CommandFn = Box<dyn Fn(Vec<String>)>;
 pub type EventFn = Box<dyn Fn(&PluginEvent)>;
+pub type LogFn = dyn Fn(&str);
 
-#[allow(dead_code)]
+#[derive(Clone)]
 pub struct PluginApi {
-    pub commands: Rc<RefCell<HashMap<String, CommandFn>>>,
-    pub event_handlers: Rc<RefCell<HashMap<String, Vec<EventFn>>>>,
-    #[allow(dead_code)]
-    pub log_fn: Box<dyn Fn(&str)>,
+    commands: Rc<RefCell<HashMap<String, CommandFn>>>,
+    event_handlers: Rc<RefCell<HashMap<String, Vec<EventFn>>>>,
+    pub log_fn: Rc<LogFn>,
 }
 
 impl PluginApi {
-    #[allow(dead_code)]
+    pub fn new() -> Self {
+        Self {
+            commands: Rc::new(RefCell::new(HashMap::new())),
+            event_handlers: Rc::new(RefCell::new(HashMap::new())),
+            log_fn: Rc::new(|msg| eprintln!("[plugin] {}", msg)),
+        }
+    }
+
     pub fn add_command(&self, name: String, f: CommandFn) {
         self.commands.borrow_mut().insert(name, f);
     }
 
-    #[allow(dead_code)]
     pub fn on(&self, event: String, f: EventFn) {
         self.event_handlers.borrow_mut().entry(event).or_insert_with(Vec::new).push(f);
     }
 
-    #[allow(dead_code)]
     pub fn log(&self, msg: &str) {
         (self.log_fn)(msg);
     }
+
+    pub fn log_fn(&self) -> Rc<LogFn> {
+        self.log_fn.clone()
+    }
+
+    pub fn commands(&self) -> &Rc<RefCell<HashMap<String, CommandFn>>> {
+        &self.commands
+    }
+
+    pub fn event_handlers(&self) -> &Rc<RefCell<HashMap<String, Vec<EventFn>>>> {
+        &self.event_handlers
+    }
 }
 
-#[allow(dead_code)]
+impl Default for PluginApi {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub trait Plugin {
     fn name(&self) -> &str;
     fn setup(&mut self, api: &PluginApi);

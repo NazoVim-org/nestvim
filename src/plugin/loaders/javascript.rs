@@ -1,13 +1,16 @@
 use crate::plugin::{Plugin, PluginApi};
 use crate::types::PluginEvent;
+use quickjs_rusty::Context;
 use std::path::Path;
 use std::rc::Rc;
 
-pub struct LispPlugin {
+pub struct JavaScriptPlugin {
     name: String,
+    #[allow(dead_code)]
+    context: Context,
 }
 
-impl Plugin for LispPlugin {
+impl Plugin for JavaScriptPlugin {
     fn name(&self) -> &str {
         &self.name
     }
@@ -21,15 +24,15 @@ impl Plugin for LispPlugin {
     }
 }
 
-pub struct LispLoader;
+pub struct JavaScriptLoader;
 
-impl super::Loader for LispLoader {
+impl super::Loader for JavaScriptLoader {
     fn name(&self) -> &str {
-        "lisp"
+        "javascript"
     }
 
     fn supported_extensions(&self) -> &[&str] {
-        &["lisp"]
+        &["js", "mjs"]
     }
 
     fn load(&self, path: &Path, _api: Rc<PluginApi>) -> Result<Box<dyn Plugin>, super::LoaderError> {
@@ -42,6 +45,21 @@ impl super::Loader for LispLoader {
             .unwrap_or("unnamed")
             .to_string();
 
-        Ok(Box::new(LispPlugin { name }))
+        let context = Context::builder()
+            .build()
+            .map_err(|e| super::LoaderError::Parse(format!("Context creation failed: {}", e)))?;
+
+        let js_code = format!(
+            r#"
+            var nestvim = {{
+                log: function(msg) {{ console.log(msg); }}
+            }};
+            {}"#,
+            code
+        );
+
+        let _ = context.eval(&js_code, false);
+
+        Ok(Box::new(JavaScriptPlugin { name, context }))
     }
 }

@@ -21,6 +21,7 @@ libloading = "0.8"
 atty = "0.2"
 clap = { version = "4", features = ["derive"] }
 arboard = "3"
+quickjs-rusty = "0.11"
 
 [profile.release]
 lto = true

@@ -1,10 +1,13 @@
 use crate::plugin::{Plugin, PluginApi};
 use crate::types::PluginEvent;
+use mlua::Lua;
 use std::path::Path;
+use std::rc::Rc;
 
-#[allow(dead_code)]
 pub struct LuaPlugin {
     name: String,
+    #[allow(dead_code)]
+    lua: Lua,
 }
 
 impl Plugin for LuaPlugin {
@@ -21,24 +24,47 @@ impl Plugin for LuaPlugin {
     }
 }
 
-#[allow(dead_code)]
-pub fn load_lua_plugin(path: &Path, _api: std::rc::Rc<PluginApi>) -> Result<Box<dyn Plugin>, String> {
-    let code = std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+pub struct LuaLoader;
 
-    // nameをコードから抽出（簡易版）
-    let name = code.lines()
-        .find_map(|line| {
-            let line = line.trim();
-            if line.starts_with("name") && line.contains("=") {
-                line.split('=')
-                    .nth(1)
-                    .map(|s| s.trim().trim_matches('"').trim_matches('\'').to_string())
-            } else {
-                None
-            }
-        })
-        .ok_or_else(|| format!("Missing plugin name in {}", path.display()))?;
+impl super::Loader for LuaLoader {
+    fn name(&self) -> &str {
+        "lua"
+    }
 
-    Ok(Box::new(LuaPlugin { name }))
+    fn supported_extensions(&self) -> &[&str] {
+        &["lua"]
+    }
+
+    fn load(&self, path: &Path, api: Rc<PluginApi>) -> Result<Box<dyn Plugin>, super::LoaderError> {
+        let code = std::fs::read_to_string(path)
+            .map_err(|e| super::LoaderError::Io(format!("Failed to read {}: {}", path.display(), e)))?;
+
+        let name = path
+            .file_stem()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unnamed")
+            .to_string();
+
+        let lua = Lua::new();
+
+        let api_outer = api.clone();
+        let _ = lua.globals().set(
+            "nestvim",
+            lua.create_table()
+                .map_err(|e| super::LoaderError::Parse(format!("Lua error: {}", e)))?,
+        );
+
+        let _ = lua.globals().get::<_, mlua::Table>("nestvim")
+            .map_err(|e| super::LoaderError::Parse(format!("Lua error: {}", e)))?
+            .set("log", lua.create_function(move |_lua, msg: String| {
+                api_outer.log(&msg);
+                Ok(())
+            }).map_err(|e| super::LoaderError::Parse(format!("Lua error: {}", e)))?)
+            .map_err(|e| super::LoaderError::Parse(format!("Lua error: {}", e)))?;
+
+        let _ = lua.load(&code).eval::<mlua::Value>()
+            .map_err(|e| super::LoaderError::Parse(format!("Lua eval error: {}", e)))?;
+
+        Ok(Box::new(LuaPlugin { name, lua }))
+    }
 }

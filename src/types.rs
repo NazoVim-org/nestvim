@@ -129,6 +129,7 @@ pub struct EditorState {
     pub visual_type: Option<VisualType>,
     pub marks: Marks,
     pub macros: Macros,
+    pub confirmation_prompt: Option<ConfirmationPrompt>,
 }
 
 impl Default for EditorState {
@@ -143,6 +144,7 @@ impl Default for EditorState {
             visual_type: None,
             marks: Marks::new(),
             macros: Macros::new(),
+            confirmation_prompt: None,
         }
     }
 }
@@ -154,4 +156,31 @@ pub enum PluginEvent {
     BufferChange,
     Key { mode: Mode, key: char },
     BufferSave { file_path: Option<PathBuf> },
+}
+
+#[derive(Clone, Debug)]
+pub enum ConfirmAction {
+    Quit,
+    QuitDiscard,
+    WriteQuitAll,
+}
+
+#[derive(Clone, Debug)]
+pub struct ConfirmationPrompt {
+    pub message: String,
+    pub action: ConfirmAction,
+}
+
+impl EditorState {
+    pub fn has_confirmation(&self) -> bool {
+        self.confirmation_prompt.is_some()
+    }
+
+    pub fn set_confirmation(&mut self, message: String, action: ConfirmAction) {
+        self.confirmation_prompt = Some(ConfirmationPrompt { message, action });
+    }
+
+    pub fn clear_confirmation(&mut self) {
+        self.confirmation_prompt = None;
+    }
 }

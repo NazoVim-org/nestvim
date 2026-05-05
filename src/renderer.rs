@@ -8,6 +8,7 @@ pub struct Renderer {
     last_modification_count: usize,
     last_line_count: usize,
     last_status: String,
+    last_confirmation: Option<String>,
 }
 
 impl Renderer {
@@ -17,6 +18,7 @@ impl Renderer {
             last_modification_count: 0,
             last_line_count: 0,
             last_status: String::new(),
+            last_confirmation: None,
         }
     }
 
@@ -26,6 +28,8 @@ impl Renderer {
 
         let status = if state.mode == Mode::Command {
             format!(":{}", state.command_buffer)
+        } else if state.has_confirmation() {
+            state.confirmation_prompt.as_ref().unwrap().message.clone()
         } else {
             format!(
                 "-- {} -- {} {}",
@@ -34,9 +38,12 @@ impl Renderer {
                 if state.dirty { "[+]" } else { "" }
             )
         };
+        
+        let confirmation_msg = state.confirmation_prompt.as_ref().map(|c| c.message.clone());
         let needs_full_render = buffer.modification_count() != self.last_modification_count
             || self.last_line_count != buffer.line_count()
-            || status != self.last_status;
+            || status != self.last_status
+            || confirmation_msg != self.last_confirmation;
 
         if needs_full_render {
             self.scroll_top = self.scroll_top.clamp(1, buffer.line_count().saturating_sub(visible_rows).max(1));
@@ -68,6 +75,7 @@ impl Renderer {
 
             terminal.write_status(&status)?;
             self.last_status = status;
+            self.last_confirmation = confirmation_msg;
         }
 
         let screen_row = (state.cursor.line.saturating_sub(self.scroll_top) + 1) as u16;

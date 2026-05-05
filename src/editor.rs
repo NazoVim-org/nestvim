@@ -4,7 +4,7 @@ use crate::plugin::PluginManager;
 use crate::register::Register;
 use crate::renderer::Renderer;
 use crate::terminal::Terminal;
-use crate::types::{EditorState, Mode, PluginEvent, SearchDirection, SearchResult, VisualType};
+use crate::types::{ConfirmAction, EditorState, Mode, PluginEvent, SearchDirection, SearchResult, VisualType};
 use crate::undo::UndoManager;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
 use futures::StreamExt;
@@ -78,6 +78,7 @@ impl Editor {
             visual_type: None,
             marks: crate::types::Marks::new(),
             macros: crate::types::Macros::new(),
+            confirmation_prompt: None,
         };
         
         Ok(Self {
@@ -812,6 +813,11 @@ impl Editor {
     }
     
     async fn handle_command(&mut self, key: KeyCode) {
+        if self.state.has_confirmation() {
+            self.handle_confirmation(key).await;
+            return;
+        }
+
         match key {
             KeyCode::Enter => {
                 let cmd = self.state.command_buffer.trim().to_string();
@@ -823,6 +829,9 @@ impl Editor {
                 
                 match cmd.as_str() {
                     "q" => {
+                        self.handle_quit().await;
+                    }
+                    "q!" => {
                         self.running = false;
                     }
                     "w" => {
@@ -839,6 +848,17 @@ impl Editor {
                             self.plugin_manager.emit(PluginEvent::BufferSave { file_path: self.state.file_path.clone() });
                             self.running = false;
                         }
+                    }
+                    "wqa" | "wa" => {
+                        if let Err(e) = self.buffer.save_file().await {
+                            eprintln!("[editor] Save failed: {}", e);
+                        } else {
+                            self.plugin_manager.emit(PluginEvent::BufferSave { file_path: self.state.file_path.clone() });
+                            self.running = false;
+                        }
+                    }
+                    "qa" => {
+                        self.running = false;
                     }
                     _ => {
                         if !self.plugin_manager.execute_command(&cmd) {
@@ -863,6 +883,56 @@ impl Editor {
                 self.needs_render = true;
             }
             _ => {}
+        }
+    }
+    
+    async fn handle_quit(&mut self) {
+        if self.buffer.dirty {
+            self.state.set_confirmation(
+                "No write since last change. Quit anyway? (y/n Enter/Esc: yes, n: no)".to_string(),
+                ConfirmAction::Quit,
+            );
+            self.needs_render = true;
+        } else {
+            self.running = false;
+        }
+    }
+    
+    async fn handle_confirmation(&mut self, key: KeyCode) {
+        let should_quit = match key {
+            KeyCode::Char('y') | KeyCode::Enter => true,
+            KeyCode::Char('n') | KeyCode::Esc => false,
+            _ => {
+                self.state.clear_confirmation();
+                self.needs_render = true;
+                return;
+            }
+        };
+        
+        let action = self.state.confirmation_prompt.as_ref().unwrap().action.clone();
+        self.state.clear_confirmation();
+        self.needs_render = true;
+        
+        match action {
+            ConfirmAction::Quit => {
+                if should_quit {
+                    self.running = false;
+                }
+            }
+            ConfirmAction::QuitDiscard => {
+                self.running = false;
+            }
+            ConfirmAction::WriteQuitAll => {
+                if !should_quit {
+                    return;
+                }
+                if let Err(e) = self.buffer.save_file().await {
+                    eprintln!("[editor] Save failed: {}", e);
+                } else {
+                    self.plugin_manager.emit(PluginEvent::BufferSave { file_path: self.state.file_path.clone() });
+                    self.running = false;
+                }
+            }
         }
     }
 }

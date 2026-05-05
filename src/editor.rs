@@ -8,6 +8,7 @@ use crate::types::{EditorState, Mode, PluginEvent, VisualType};
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
 use futures::StreamExt;
 use std::io;
+use std::time::{Duration, Instant};
 
 pub struct Editor {
     terminal: Terminal,
@@ -19,6 +20,7 @@ pub struct Editor {
     state: EditorState,
     running: bool,
     last_highlight_mod_count: usize,
+    last_keypress_time: Instant,
     needs_render: bool,
     pending_operator: Option<char>,
     pending_register: Option<char>,
@@ -76,6 +78,7 @@ impl Editor {
             state,
             running: false,
             last_highlight_mod_count: 0,
+            last_keypress_time: Instant::now(),
             needs_render: true,
             pending_operator: None,
             pending_register: None,
@@ -100,6 +103,7 @@ impl Editor {
                     match event {
                         Ok(Event::Key(key)) => {
                             if key.kind == KeyEventKind::Press {
+                                self.last_keypress_time = Instant::now();
                                 self.handle_key(key.code).await;
                             }
                         }
@@ -113,7 +117,10 @@ impl Editor {
                 }
             }
             
-            if self.buffer.modification_count() > self.last_highlight_mod_count {
+            let now = Instant::now();
+            if self.buffer.modification_count() > self.last_highlight_mod_count
+                && now.duration_since(self.last_keypress_time) > Duration::from_millis(150)
+            {
                 let _ = self.highlighter.update(&self.buffer.to_string(), self.state.file_path.as_deref());
                 self.last_highlight_mod_count = self.buffer.modification_count();
             }

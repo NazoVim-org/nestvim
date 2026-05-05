@@ -1,13 +1,11 @@
 use crate::buffer::TextBuffer;
 use crate::terminal::Terminal;
 use crate::types::{EditorState, Mode};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::io;
 
 pub struct Renderer {
     scroll_top: usize,
-    last_content_hash: u64,
+    last_modification_count: usize,
     last_line_count: usize,
     last_status: String,
 }
@@ -16,24 +14,16 @@ impl Renderer {
     pub fn new() -> Self {
         Self {
             scroll_top: 1,
-            last_content_hash: 0,
+            last_modification_count: 0,
             last_line_count: 0,
             last_status: String::new(),
         }
-    }
-
-    fn compute_hash(buffer: &TextBuffer) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        buffer.line_count().hash(&mut hasher);
-        buffer.to_string().hash(&mut hasher);
-        hasher.finish()
     }
 
     pub fn render(&mut self, terminal: &mut Terminal, buffer: &TextBuffer, state: &EditorState) -> io::Result<()> {
         let rows = terminal.rows().max(2);
         let visible_rows = (rows as usize).saturating_sub(2).max(1);
 
-        let content_hash = Self::compute_hash(buffer);
         let status = if state.mode == Mode::Command {
             format!(":{}", state.command_buffer)
         } else {
@@ -44,7 +34,7 @@ impl Renderer {
                 if state.dirty { "[+]" } else { "" }
             )
         };
-        let needs_full_render = content_hash != self.last_content_hash
+        let needs_full_render = buffer.modification_count() != self.last_modification_count
             || self.last_line_count != buffer.line_count()
             || status != self.last_status;
 
@@ -58,7 +48,7 @@ impl Renderer {
             self.scroll_top = state.cursor.line - visible_rows + 1;
         }
 
-        self.last_content_hash = content_hash;
+        self.last_modification_count = buffer.modification_count();
         self.last_line_count = buffer.line_count();
 
         if needs_full_render {

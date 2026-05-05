@@ -9,6 +9,7 @@ pub struct Renderer {
     last_line_count: usize,
     last_status: String,
     last_confirmation: Option<String>,
+    show_line_numbers: bool,
 }
 
 impl Renderer {
@@ -19,23 +20,48 @@ impl Renderer {
             last_line_count: 0,
             last_status: String::new(),
             last_confirmation: None,
+            show_line_numbers: true,
         }
+    }
+
+    pub fn set_show_line_numbers(&mut self, show: bool) {
+        self.show_line_numbers = show;
+    }
+
+    pub fn toggle_line_numbers(&mut self) {
+        self.show_line_numbers = !self.show_line_numbers;
     }
 
     pub fn render(&mut self, terminal: &mut Terminal, buffer: &TextBuffer, state: &EditorState) -> io::Result<()> {
         let rows = terminal.rows().max(2);
         let visible_rows = (rows as usize).saturating_sub(2).max(1);
 
+        let line_number_width = if state.show_line_numbers {
+            let total_lines = buffer.line_count();
+            if total_lines == 0 { 1 } else { total_lines.to_string().len() }
+        } else {
+            0
+        };
+
         let status = if state.mode == Mode::Command {
             format!(":{}", state.command_buffer)
         } else if state.has_confirmation() {
             state.confirmation_prompt.as_ref().unwrap().message.clone()
+        } else if state.mode == Mode::Replace {
+            let line = state.cursor.line;
+            let col = state.cursor.col + 1;
+            format!(
+                "-- REPLACE -- {} {}:{}",
+                state.file_path.as_ref().map_or("[No Name]", |p| p.to_str().unwrap_or("[Invalid Path]")),
+                line, col
+            )
         } else {
             format!(
-                "-- {} -- {} {}",
+                "-- {} -- {} {}{}",
                 state.mode,
                 state.file_path.as_ref().map_or("[No Name]", |p| p.to_str().unwrap_or("[Invalid Path]")),
-                if state.dirty { "[+]" } else { "" }
+                if state.dirty { "[+]" } else { "" },
+                if state.show_line_numbers { " " } else { "" }
             )
         };
         
@@ -43,10 +69,12 @@ impl Renderer {
         let needs_full_render = buffer.modification_count() != self.last_modification_count
             || self.last_line_count != buffer.line_count()
             || status != self.last_status
-            || confirmation_msg != self.last_confirmation;
+            || confirmation_msg != self.last_confirmation
+            || self.show_line_numbers != state.show_line_numbers;
 
         if needs_full_render {
             self.scroll_top = self.scroll_top.clamp(1, buffer.line_count().saturating_sub(visible_rows).max(1));
+            self.show_line_numbers = state.show_line_numbers;
         }
 
         if state.cursor.line < self.scroll_top {
@@ -65,9 +93,18 @@ impl Renderer {
                 let buf_line = self.scroll_top + i;
                 let raw_line = buffer.get_line(buf_line);
                 let display_text = if raw_line.is_empty() && buf_line > buffer.line_count() && buffer.line_count() > 0 {
-                    "~".to_string()
+                    if state.show_line_numbers {
+                        format!("{:width$}", "~", width = line_number_width)
+                    } else {
+                        "~".to_string()
+                    }
                 } else {
-                    raw_line
+                    if state.show_line_numbers {
+                        let line_num = if buf_line <= buffer.line_count() { buf_line } else { 0 };
+                        format!("{}{}", format!("{:width$}", line_num, width = line_number_width), raw_line)
+                    } else {
+                        raw_line
+                    }
                 };
 
                 terminal.write_line((i + 1) as u16, &display_text)?;
@@ -79,7 +116,12 @@ impl Renderer {
         }
 
         let screen_row = (state.cursor.line.saturating_sub(self.scroll_top) + 1) as u16;
-        terminal.move_cursor(screen_row, (state.cursor.col + 1) as u16)?;
+        let screen_col = if state.show_line_numbers {
+            (state.cursor.col + line_number_width + 1) as u16
+        } else {
+            (state.cursor.col + 1) as u16
+        };
+        terminal.move_cursor(screen_row, screen_col)?;
         terminal.flush()
     }
 }

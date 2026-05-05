@@ -6,7 +6,7 @@ use crate::renderer::Renderer;
 use crate::terminal::Terminal;
 use crate::types::{ConfirmAction, EditorState, Mode, PluginEvent, SearchDirection, SearchResult, VisualType};
 use crate::undo::UndoManager;
-use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
+use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind, KeyModifiers};
 use futures::StreamExt;
 use std::io;
 use std::time::{Duration, Instant};
@@ -32,6 +32,15 @@ pub struct Editor {
     search_direction: SearchDirection,
     search_results: Vec<SearchResult>,
     current_search_idx: usize,
+    dot_last_action: Option<DotAction>,
+    replace_char: Option<char>,
+}
+
+#[derive(Clone)]
+enum DotAction {
+    Insert { text: String },
+    Delete { text: String, line: usize, col: usize },
+    Change { text: String, line: usize, col: usize },
 }
 
 impl Editor {
@@ -79,6 +88,7 @@ impl Editor {
             marks: crate::types::Marks::new(),
             macros: crate::types::Macros::new(),
             confirmation_prompt: None,
+            show_line_numbers: true,
         };
         
         Ok(Self {
@@ -102,6 +112,8 @@ impl Editor {
             search_direction: SearchDirection::Forward,
             search_results: Vec::new(),
             current_search_idx: 0,
+            dot_last_action: None,
+            replace_char: None,
         })
     }
     
@@ -124,7 +136,8 @@ impl Editor {
                         Ok(Event::Key(key)) => {
                             if key.kind == KeyEventKind::Press {
                                 self.last_keypress_time = Instant::now();
-                                self.handle_key(key.code).await;
+                                let modifiers = key.modifiers;
+                                self.handle_key(key.code, modifiers).await;
                             }
                         }
                         Ok(Event::Resize(_, _)) => {
@@ -156,9 +169,45 @@ impl Editor {
         Ok(())
     }
     
-    async fn handle_key(&mut self, key: KeyCode) {
+    async fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
         if let KeyCode::Char(c) = key {
             self.plugin_manager.emit(PluginEvent::Key { mode: self.state.mode, key: c });
+        }
+        
+        if modifiers.contains(KeyModifiers::CONTROL) {
+            match self.state.mode {
+                Mode::Normal | Mode::Insert | Mode::Replace => {
+                    match key {
+                        KeyCode::Char('d') => {
+                            self.scroll_by(self.terminal.rows() as usize / 2);
+                            self.needs_render = true;
+                            return;
+                        }
+                        KeyCode::Char('u') => {
+                            self.scroll_by(self.terminal.rows() as usize / 2);
+                            self.needs_render = true;
+                            return;
+                        }
+                        KeyCode::Char('y') => {
+                            self.scroll_up_one();
+                            self.needs_render = true;
+                            return;
+                        }
+                        KeyCode::Char('e') => {
+                            self.scroll_down_one();
+                            self.needs_render = true;
+                            return;
+                        }
+                        KeyCode::Char('g') => {
+                            self.show_file_info();
+                            self.needs_render = true;
+                            return;
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
         }
         
         match self.state.mode {
@@ -166,6 +215,7 @@ impl Editor {
             Mode::Insert => self.handle_insert(key).await,
             Mode::Command => self.handle_command(key).await,
             Mode::Visual => self.handle_visual(key).await,
+            Mode::Replace => self.handle_replace(key).await,
         }
     }
     
@@ -237,8 +287,19 @@ impl Editor {
             }
             KeyCode::Char('r') => {
                 if self.state.command_buffer.is_empty() {
-                    self.redo();
+                    let prev_mode = self.state.mode;
+                    self.state.mode = Mode::Replace;
+                    self.replace_char = None;
+                    self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Replace });
+                    self.needs_render = true;
                 }
+            }
+            KeyCode::Char('R') => {
+                let prev_mode = self.state.mode;
+                self.state.mode = Mode::Replace;
+                self.replace_char = None;
+                self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Replace });
+                self.needs_render = true;
             }
             KeyCode::Char('v') => {
                 let prev_mode = self.state.mode;
@@ -293,6 +354,89 @@ impl Editor {
                 self.pending_macro_play = Some('@');
             }
             _ => {
+                match key {
+                    KeyCode::Char('g') => {
+                        self.pending_operator = Some('g');
+                    }
+                    KeyCode::Char('G') => {
+                        self.state.cursor.line = self.buffer.line_count().max(1);
+                        let len = self.buffer.get_line(self.state.cursor.line).len();
+                        self.state.cursor.col = len.saturating_sub(1);
+                        self.needs_render = true;
+                    }
+                    KeyCode::Char('%') => {
+                        self.jump_to_matching_bracket();
+                        self.needs_render = true;
+                    }
+                    KeyCode::Char('x') => {
+                        self.delete_char('"');
+                        self.needs_render = true;
+                    }
+                    KeyCode::Char('.') => {
+                        self.repeat_last_action().await;
+                        self.needs_render = true;
+                    }
+                    KeyCode::Char('w') => {
+                        self.move_word_forward();
+                        self.needs_render = true;
+                    }
+                    KeyCode::Char('b') => {
+                        self.move_word_backward();
+                        self.needs_render = true;
+                    }
+                    KeyCode::Char('e') => {
+                        self.move_word_end();
+                        self.needs_render = true;
+                    }
+                    KeyCode::Char('o') => {
+                        self.open_line(false);
+                        self.needs_render = true;
+                    }
+                    KeyCode::Char('O') => {
+                        self.open_line(true);
+                        self.needs_render = true;
+                    }
+                    KeyCode::Char('a') => {
+                        let prev_mode = self.state.mode;
+                        self.state.mode = Mode::Insert;
+                        self.state.cursor.col = (self.state.cursor.col + 1).min(self.buffer.get_line(self.state.cursor.line).len().saturating_sub(1));
+                        self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Insert });
+                        self.needs_render = true;
+                    }
+                    KeyCode::Char('A') => {
+                        let prev_mode = self.state.mode;
+                        self.state.mode = Mode::Insert;
+                        let line_len = self.buffer.get_line(self.state.cursor.line).len();
+                        self.state.cursor.col = line_len.saturating_sub(1);
+                        self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Insert });
+                        self.needs_render = true;
+                    }
+                    KeyCode::Char('c') => {
+                        self.pending_operator = Some('c');
+                    }
+                    KeyCode::Char('J') => {
+                        self.join_lines();
+                        self.needs_render = true;
+                    }
+                    KeyCode::Char('>') => {
+                        self.pending_operator = Some('>');
+                    }
+                    KeyCode::Char('<') => {
+                        self.pending_operator = Some('<');
+                    }
+                    KeyCode::Char('z') => {
+                        self.pending_operator = Some('z');
+                    }
+                    KeyCode::Char('s') => {
+                        self.delete_char('"');
+                        let prev_mode = self.state.mode;
+                        self.state.mode = Mode::Insert;
+                        self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Insert });
+                        self.needs_render = true;
+                    }
+                    _ => {}
+                }
+
                 if let Some(_pending) = self.pending_macro_play {
                     if let KeyCode::Char(c) = key {
                         if c >= 'a' && c <= 'z' {
@@ -303,6 +447,34 @@ impl Editor {
                         }
                     }
                     self.pending_macro_play = None;
+                }
+                if let Some(op) = self.pending_operator {
+                    if op == 'g' {
+                        if let KeyCode::Char('g') = key {
+                            self.state.cursor.line = 1;
+                            self.state.cursor.col = 0;
+                        }
+                        self.pending_operator = None;
+                        self.needs_render = true;
+                        return;
+                    }
+                    if let KeyCode::Char('z') = key {
+                        match key {
+                            KeyCode::Char('z') => {
+                                self.scroll_cursor_to_center();
+                            }
+                            KeyCode::Char('t') => {
+                                self.scroll_cursor_to_top();
+                            }
+                            KeyCode::Char('b') => {
+                                self.scroll_cursor_to_bottom();
+                            }
+                            _ => {}
+                        }
+                        self.pending_operator = None;
+                        self.needs_render = true;
+                        return;
+                    }
                 }
                 if let Some(pending) = self.pending_mark {
                     if let KeyCode::Char(c) = key {
@@ -385,8 +557,99 @@ impl Editor {
                     _ => {}
                 }
             }
+            'c' => {
+                match key {
+                    KeyCode::Char('c') => {
+                        let content = self.buffer.get_line(self.state.cursor.line);
+                        self.register.set(register, &content);
+                        self.buffer.delete_line(self.state.cursor.line);
+                        let prev_mode = self.state.mode;
+                        self.state.mode = Mode::Insert;
+                        self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Insert });
+                        self.dot_last_action = Some(DotAction::Change { text: content, line: self.state.cursor.line, col: 0 });
+                        self.on_buffer_modified();
+                    }
+                    KeyCode::Char('w') => {
+                        let (word, start, _) = self.buffer.get_word_range(self.state.cursor.line, self.state.cursor.col);
+                        if !word.is_empty() {
+                            let char_start = self.buffer.line_to_char(self.state.cursor.line - 1) + start;
+                            let char_end = char_start + word.len();
+                            let content = self.buffer.get_char_range(self.state.cursor.line, start, self.state.cursor.line, start + word.len());
+                            self.register.set(register, &content);
+                            self.buffer.remove_range(char_start, char_end);
+                            let prev_mode = self.state.mode;
+                            self.state.mode = Mode::Insert;
+                            self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Insert });
+                            self.dot_last_action = Some(DotAction::Change { text: content, line: self.state.cursor.line, col: start });
+                            self.on_buffer_modified();
+                        }
+                    }
+                    KeyCode::Char('i') => {
+                        self.handle_text_object_change(key, register, true).await;
+                    }
+                    KeyCode::Char('a') => {
+                        self.handle_text_object_change(key, register, false).await;
+                    }
+                    _ => {}
+                }
+            }
+            '>' => {
+                match key {
+                    KeyCode::Char('>') => {
+                        self.indent_lines(register, true);
+                    }
+                    _ => {}
+                }
+            }
+            '<' => {
+                match key {
+                    KeyCode::Char('<') => {
+                        self.indent_lines(register, false);
+                    }
+                    _ => {}
+                }
+            }
             _ => {}
         }
+    }
+
+    async fn handle_text_object_change(&mut self, key: KeyCode, register: char, inner: bool) {
+        match key {
+            KeyCode::Char('w') => {
+                if inner {
+                    let (word, start, _) = self.buffer.get_word_range(self.state.cursor.line, self.state.cursor.col);
+                    if !word.is_empty() {
+                        let content = self.buffer.get_char_range(self.state.cursor.line, start, self.state.cursor.line, start + word.len());
+                        self.register.set(register, &content);
+                        let char_start = self.buffer.line_to_char(self.state.cursor.line - 1) + start;
+                        let char_end = char_start + word.len();
+                        self.buffer.remove_range(char_start, char_end);
+                    }
+                }
+                let prev_mode = self.state.mode;
+                self.state.mode = Mode::Insert;
+                self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Insert });
+                self.on_buffer_modified();
+            }
+            _ => {}
+        }
+    }
+
+    fn indent_lines(&mut self, register: char, indent: bool) {
+        let line = self.state.cursor.line;
+        let content = self.buffer.get_line(line);
+        let _ = register;
+        
+        if indent {
+            self.buffer.insert(line, 0, "\t");
+        } else if content.starts_with('\t') {
+            self.buffer.delete(line, 0);
+        } else if content.starts_with("  ") {
+            self.buffer.delete(line, 0);
+            self.buffer.delete(line, 0);
+        }
+        
+        self.needs_render = true;
     }
     
     async fn handle_text_object(&mut self, key: KeyCode, register: char, inner: bool) {
@@ -841,7 +1104,22 @@ impl Editor {
                             self.plugin_manager.emit(PluginEvent::BufferSave { file_path: self.state.file_path.clone() });
                         }
                     }
+                    "w!" => {
+                        if let Err(e) = self.buffer.save_file().await {
+                            eprintln!("[editor] Save failed: {}", e);
+                        } else {
+                            self.plugin_manager.emit(PluginEvent::BufferSave { file_path: self.state.file_path.clone() });
+                        }
+                    }
                     "wq" => {
+                        if let Err(e) = self.buffer.save_file().await {
+                            eprintln!("[editor] Save failed: {}", e);
+                        } else {
+                            self.plugin_manager.emit(PluginEvent::BufferSave { file_path: self.state.file_path.clone() });
+                            self.running = false;
+                        }
+                    }
+                    "wq!" => {
                         if let Err(e) = self.buffer.save_file().await {
                             eprintln!("[editor] Save failed: {}", e);
                         } else {
@@ -860,8 +1138,16 @@ impl Editor {
                     "qa" => {
                         self.running = false;
                     }
+                    "e" => {
+                        self.reload_file().await;
+                    }
+                    "e!" => {
+                        self.reload_file_discard().await;
+                    }
                     _ => {
-                        if !self.plugin_manager.execute_command(&cmd) {
+                        if cmd.starts_with("set ") {
+                            self.handle_set_command(&cmd);
+                        } else if !self.plugin_manager.execute_command(&cmd) {
                             eprintln!("[editor] Unknown command: {}", cmd);
                         }
                     }
@@ -934,5 +1220,361 @@ impl Editor {
                 }
             }
         }
+    }
+
+    async fn reload_file(&mut self) {
+        if let Some(path) = &self.state.file_path {
+            match TextBuffer::load_file(path.to_str().unwrap_or("")).await {
+                Ok(buf) => {
+                    self.buffer = buf;
+                }
+                Err(e) => {
+                    eprintln!("[editor] Failed to reload file: {}", e);
+                }
+            }
+        }
+    }
+
+    async fn reload_file_discard(&mut self) {
+        self.buffer.dirty = false;
+        self.reload_file().await;
+    }
+
+    fn handle_set_command(&mut self, cmd: &str) {
+        let args = cmd.trim_start_matches("set ").trim();
+        
+        match args {
+            "number" => {
+                self.state.show_line_numbers = true;
+            }
+            "nonumber" | "nonumber!" => {
+                self.state.show_line_numbers = false;
+            }
+            "number!" => {
+                self.state.show_line_numbers = !self.state.show_line_numbers;
+            }
+            _ => {
+                eprintln!("[editor] Unknown set option: {}", args);
+            }
+        }
+    }
+
+    async fn handle_replace(&mut self, key: KeyCode) {
+        match key {
+            KeyCode::Esc => {
+                let prev_mode = self.state.mode;
+                self.state.mode = Mode::Normal;
+                self.replace_char = None;
+                self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Normal });
+                self.needs_render = true;
+            }
+            KeyCode::Char(c) => {
+                let line = self.state.cursor.line;
+                let col = self.state.cursor.col;
+                if col < self.buffer.get_line(line).len() {
+                    self.buffer.delete(line, col);
+                }
+                self.buffer.insert_char(line, col, c);
+                self.state.cursor.col += 1;
+                self.on_buffer_modified();
+            }
+            KeyCode::Backspace => {
+                if self.state.cursor.col > 0 {
+                    self.state.cursor.col -= 1;
+                }
+                self.needs_render = true;
+            }
+            KeyCode::Enter => {
+                self.buffer.insert(self.state.cursor.line, self.state.cursor.col, "\n");
+                self.state.cursor.line += 1;
+                self.state.cursor.col = 0;
+                self.on_buffer_modified();
+            }
+            _ => {}
+        }
+    }
+
+    fn page_down(&mut self) {
+        let terminal_rows = self.terminal.rows() as usize;
+        let line_count = self.buffer.line_count();
+        self.state.cursor.line = (self.state.cursor.line + terminal_rows).min(line_count).max(1);
+        let len = self.buffer.get_line(self.state.cursor.line).len();
+        self.state.cursor.col = self.state.cursor.col.min(len.saturating_sub(1));
+    }
+
+    fn page_up(&mut self) {
+        let terminal_rows = self.terminal.rows() as usize;
+        self.state.cursor.line = self.state.cursor.line.saturating_sub(terminal_rows).max(1);
+        let len = self.buffer.get_line(self.state.cursor.line).len();
+        self.state.cursor.col = self.state.cursor.col.min(len.saturating_sub(1));
+    }
+
+    fn scroll_by(&mut self, lines: usize) {
+        if self.state.cursor.line > lines {
+            self.state.cursor.line -= lines;
+        } else {
+            self.state.cursor.line = 1;
+        }
+    }
+
+    fn jump_to_matching_bracket(&mut self) {
+        let line = self.state.cursor.line;
+        let col = self.state.cursor.col;
+        let line_str = self.buffer.get_line(line);
+        
+        if col >= line_str.len() {
+            return;
+        }
+        
+        let ch = line_str.chars().nth(col);
+        if ch.is_none() {
+            return;
+        }
+        let ch = ch.unwrap();
+        
+        let matching = match ch {
+            '(' => ')',
+            ')' => '(',
+            '[' => ']',
+            ']' => '[',
+            '{' => '}',
+            '}' => '{',
+            _ => return,
+        };
+        
+        let direction = if ch == matching { 1 } else { -1 };
+        
+        let mut count = 1;
+        let mut current_line = line;
+        let mut current_col = col;
+        
+        loop {
+            if direction > 0 {
+                current_col += 1;
+                if current_col >= self.buffer.get_line(current_line).len() {
+                    current_line += 1;
+                    if current_line > self.buffer.line_count() {
+                        break;
+                    }
+                    current_col = 0;
+                }
+            } else {
+                if current_col == 0 {
+                    if current_line == 1 {
+                        break;
+                    }
+                    current_line -= 1;
+                    current_col = self.buffer.get_line(current_line).len().saturating_sub(1);
+                } else {
+                    current_col -= 1;
+                }
+            }
+            
+            let current_char = self.buffer.get_line(current_line).chars().nth(current_col);
+            if let Some(c) = current_char {
+                if c == ch {
+                    count += 1;
+                } else if c == matching {
+                    count -= 1;
+                    if count == 0 {
+                        self.state.cursor.line = current_line;
+                        self.state.cursor.col = current_col;
+                        return;
+                    }
+                }
+            }
+            
+            if current_line > self.buffer.line_count() || current_line < 1 {
+                break;
+            }
+        }
+    }
+
+    fn delete_char(&mut self, register: char) {
+        let line = self.state.cursor.line;
+        let col = self.state.cursor.col;
+        let line_str = self.buffer.get_line(line);
+        
+        if col >= line_str.len() {
+            if line < self.buffer.line_count() {
+                self.buffer.merge_with_prev_line(line + 1);
+            }
+        } else {
+            self.buffer.delete(line, col);
+        }
+        
+        self.dot_last_action = Some(DotAction::Delete { text: String::new(), line, col });
+        self.on_buffer_modified();
+    }
+
+    async fn repeat_last_action(&mut self) {
+        if let Some(action) = &self.dot_last_action {
+            match action.clone() {
+                DotAction::Insert { text } => {
+                    for ch in text.chars() {
+                        self.buffer.insert_char(self.state.cursor.line, self.state.cursor.col, ch);
+                        self.state.cursor.col += 1;
+                    }
+                    self.on_buffer_modified();
+                }
+                DotAction::Delete { text, line, col } => {
+                    if !text.is_empty() {
+                        self.buffer.insert(line, col, &text);
+                        self.on_buffer_modified();
+                    }
+                }
+                DotAction::Change { text, line, col } => {
+                    self.buffer.insert(line, col, &text);
+                    self.state.cursor.line = line;
+                    self.state.cursor.col = col;
+                    self.on_buffer_modified();
+                }
+            }
+        }
+    }
+
+    fn move_word_forward(&mut self) {
+        let line = self.state.cursor.line;
+        let col = self.state.cursor.col;
+        let line_str = self.buffer.get_line(line);
+        let chars: Vec<char> = line_str.chars().collect();
+        
+        let mut i = col;
+        while i < chars.len() && chars[i].is_whitespace() {
+            i += 1;
+        }
+        while i < chars.len() && !chars[i].is_whitespace() {
+            i += 1;
+        }
+        
+        if i < chars.len() {
+            self.state.cursor.col = i;
+        }
+    }
+
+    fn move_word_backward(&mut self) {
+        let line = self.state.cursor.line;
+        let col = self.state.cursor.col;
+        let line_str = self.buffer.get_line(line);
+        let chars: Vec<char> = line_str.chars().collect();
+        
+        if col == 0 {
+            return;
+        }
+        
+        let mut i = col - 1;
+        while i > 0 && chars[i].is_whitespace() {
+            i -= 1;
+        }
+        while i > 0 && !chars[i - 1].is_whitespace() {
+            i -= 1;
+        }
+        
+        self.state.cursor.col = i;
+    }
+
+    fn move_word_end(&mut self) {
+        let line = self.state.cursor.line;
+        let col = self.state.cursor.col;
+        let line_str = self.buffer.get_line(line);
+        let chars: Vec<char> = line_str.chars().collect();
+        
+        let mut i = col;
+        while i < chars.len() && chars[i].is_whitespace() {
+            i += 1;
+        }
+        
+        while i < chars.len() && !chars[i].is_whitespace() {
+            i += 1;
+        }
+        
+        if i > 0 && i <= chars.len() {
+            self.state.cursor.col = i - 1;
+        }
+    }
+
+    fn open_line(&mut self, above: bool) {
+        let line = self.state.cursor.line;
+        
+        if above {
+            self.buffer.insert(line, 0, "\n");
+            self.state.cursor.line = line;
+        } else {
+            self.buffer.insert(line + 1, 0, "\n");
+            self.state.cursor.line = line + 1;
+        }
+        self.state.cursor.col = 0;
+        
+        let prev_mode = self.state.mode;
+        self.state.mode = Mode::Insert;
+        self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Insert });
+        
+        self.dot_last_action = Some(DotAction::Insert { text: String::new() });
+        self.on_buffer_modified();
+    }
+
+    fn join_lines(&mut self) {
+        let line = self.state.cursor.line;
+        if line >= self.buffer.line_count() {
+            return;
+        }
+        
+        let current_line = self.buffer.get_line(line);
+        let next_line = self.buffer.get_line(line + 1);
+        
+        self.buffer.delete_line(line + 1);
+        
+        if current_line.ends_with(' ') || current_line.ends_with('\t') {
+        } else {
+            self.buffer.insert(line, current_line.len(), " ");
+        }
+        
+        self.dot_last_action = Some(DotAction::Change { text: String::new(), line, col: 0 });
+        self.on_buffer_modified();
+    }
+
+    fn scroll_cursor_to_center(&mut self) {
+        let terminal_rows = self.terminal.rows() as usize;
+        let visible_rows = (terminal_rows as usize).saturating_sub(2);
+        let scroll_pos = self.state.cursor.line.saturating_sub(visible_rows / 2);
+        self.state.cursor.line = scroll_pos.max(1);
+    }
+
+    fn scroll_cursor_to_top(&mut self) {
+        self.state.cursor.line = 1;
+    }
+
+    fn scroll_cursor_to_bottom(&mut self) {
+        let terminal_rows = self.terminal.rows() as usize;
+        let visible_rows = (terminal_rows as usize).saturating_sub(2);
+        let line_count = self.buffer.line_count();
+        self.state.cursor.line = (line_count.saturating_sub(visible_rows) + 1).max(1);
+    }
+
+    fn toggle_line_numbers(&mut self) {
+        self.state.show_line_numbers = !self.state.show_line_numbers;
+    }
+
+    fn scroll_up_one(&mut self) {
+        if self.state.cursor.line > 1 {
+            self.state.cursor.line -= 1;
+        }
+    }
+
+    fn scroll_down_one(&mut self) {
+        let line_count = self.buffer.line_count();
+        if self.state.cursor.line < line_count {
+            self.state.cursor.line += 1;
+        }
+    }
+
+    fn show_file_info(&mut self) {
+        let line_count = self.buffer.line_count();
+        let col = self.state.cursor.col + 1;
+        let total = self.buffer.len_chars();
+        let path = self.state.file_path.as_ref()
+            .map(|p| p.to_str().unwrap_or(""))
+            .unwrap_or("[No Name]");
+        eprintln!("\"{}\" {} lines, {} characters", path, line_count, total);
     }
 }

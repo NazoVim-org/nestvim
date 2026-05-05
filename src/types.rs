@@ -21,6 +21,7 @@ pub enum Mode {
     Insert,
     Command,
     Visual,
+    Replace,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -108,6 +109,7 @@ impl std::fmt::Display for Mode {
             Mode::Insert => write!(f, "INSERT"),
             Mode::Command => write!(f, "COMMAND"),
             Mode::Visual => write!(f, "VISUAL"),
+            Mode::Replace => write!(f, "REPLACE"),
         }
     }
 }
@@ -130,6 +132,7 @@ pub struct EditorState {
     pub marks: Marks,
     pub macros: Macros,
     pub confirmation_prompt: Option<ConfirmationPrompt>,
+    pub show_line_numbers: bool,
 }
 
 impl Default for EditorState {
@@ -145,6 +148,7 @@ impl Default for EditorState {
             marks: Marks::new(),
             macros: Macros::new(),
             confirmation_prompt: None,
+            show_line_numbers: true,
         }
     }
 }

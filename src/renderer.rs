@@ -1,6 +1,7 @@
 use crate::buffer::TextBuffer;
 use crate::terminal::Terminal;
 use crate::types::{EditorState, Mode};
+use std::io;
 
 pub struct Renderer {
     scroll_top: usize,
@@ -11,9 +12,9 @@ impl Renderer {
         Self { scroll_top: 1 }
     }
 
-    pub fn render(&mut self, terminal: &Terminal, buffer: &TextBuffer, state: &EditorState) {
-        let rows = terminal.rows() as usize;
-        let visible_rows = rows.saturating_sub(2); // Status bar
+    pub fn render(&mut self, terminal: &mut Terminal, buffer: &TextBuffer, state: &EditorState) -> io::Result<()> {
+        let rows = terminal.rows().max(2);
+        let visible_rows = (rows as usize).saturating_sub(2).max(1);
 
         // Adjust scroll position
         if state.cursor.line < self.scroll_top {
@@ -23,19 +24,19 @@ impl Renderer {
         }
 
         // Clear screen
-        let _ = terminal.clear_screen();
+        terminal.clear_screen()?;
 
         // Draw lines
         for i in 0..visible_rows {
             let buf_line = self.scroll_top + i;
             let raw_line = buffer.get_line(buf_line);
-            let display_text = if raw_line.is_empty() && buf_line > buffer.line_count() {
+            let display_text = if raw_line.is_empty() && buf_line > buffer.line_count() && buffer.line_count() > 0 {
                 "~".to_string()
             } else {
                 raw_line
             };
 
-            let _ = terminal.write_line((i + 1) as u16, &display_text);
+            terminal.write_line((i + 1) as u16, &display_text)?;
         }
 
         // Status line
@@ -49,12 +50,12 @@ impl Renderer {
                 if state.dirty { "[+]" } else { "" }
             )
         };
-        let _ = terminal.write_status(&status);
+        terminal.write_status(&status)?;
 
         // Move cursor
         let screen_row = (state.cursor.line.saturating_sub(self.scroll_top) + 1) as u16;
-        let _ = terminal.move_cursor(screen_row, (state.cursor.col + 1) as u16);
-        let _ = terminal.flush();
+        terminal.move_cursor(screen_row, (state.cursor.col + 1) as u16)?;
+        terminal.flush()
     }
 }
 

@@ -121,7 +121,9 @@ impl Editor {
             
             // Render only when needed
             if self.needs_render {
-                self.renderer.render(&self.terminal, &self.buffer, &self.state);
+                if let Err(e) = self.renderer.render(&mut self.terminal, &self.buffer, &self.state) {
+                    eprintln!("[render] error: {}", e);
+                }
                 self.needs_render = false;
             }
         }

@@ -4,20 +4,21 @@ use crossterm::{
     execute,
     terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, size},
 };
-use std::io::{self, Write, stdout};
+use std::io::{self, stdout, Stdout, Write, BufWriter};
 
 pub struct Terminal {
     rows: u16,
     cols: u16,
+    stdout: BufWriter<Stdout>,
 }
 
 impl Terminal {
     pub fn new() -> io::Result<Self> {
         match size() {
-            Ok((cols, rows)) => Ok(Self { rows, cols }),
+            Ok((cols, rows)) => Ok(Self { rows, cols, stdout: BufWriter::new(stdout()) }),
             Err(e) => {
                 eprintln!("Warning: Could not get terminal size: {}. Using defaults.", e);
-                Ok(Self { rows: 24, cols: 80 })
+                Ok(Self { rows: 24, cols: 80, stdout: BufWriter::new(stdout()) })
             }
         }
     }
@@ -27,15 +28,13 @@ impl Terminal {
             return Err(io::Error::new(io::ErrorKind::Other, "Not a terminal"));
         }
         crossterm::terminal::enable_raw_mode()?;
-        let mut stdout = stdout();
-        execute!(stdout, EnterAlternateScreen, Show)?;
+        execute!(self.stdout, EnterAlternateScreen, Show)?;
         self.update_size();
         Ok(())
     }
 
-    pub fn disable_raw_mode(&self) -> io::Result<()> {
-        let mut stdout = stdout();
-        execute!(stdout, LeaveAlternateScreen)?;
+    pub fn disable_raw_mode(&mut self) -> io::Result<()> {
+        execute!(self.stdout, LeaveAlternateScreen)?;
         crossterm::terminal::disable_raw_mode()?;
         Ok(())
     }
@@ -51,18 +50,15 @@ impl Terminal {
         self.rows
     }
 
-    pub fn move_cursor(&self, row: u16, col: u16) -> io::Result<()> {
-        let mut stdout = stdout();
-        execute!(stdout, MoveTo(col.saturating_sub(1), row.saturating_sub(1)))
+    pub fn move_cursor(&mut self, row: u16, col: u16) -> io::Result<()> {
+        execute!(self.stdout, MoveTo(col.saturating_sub(1), row.saturating_sub(1)))
     }
 
-    pub fn clear_screen(&self) -> io::Result<()> {
-        let mut stdout = stdout();
-        execute!(stdout, Clear(ClearType::All))
+    pub fn clear_screen(&mut self) -> io::Result<()> {
+        execute!(self.stdout, Clear(ClearType::All))
     }
 
-    pub fn write_line(&self, row: u16, content: &str) -> io::Result<()> {
-        let mut stdout = stdout();
+    pub fn write_line(&mut self, row: u16, content: &str) -> io::Result<()> {
         let cols = self.cols as usize;
 
         let stripped = strip_ansi(content);
@@ -73,18 +69,18 @@ impl Terminal {
             content.chars().take(cols).collect()
         };
 
-        execute!(stdout, MoveTo(0, row.saturating_sub(1)))?;
-        stdout.write_all(padded.as_bytes())?;
-        stdout.flush()
+        execute!(self.stdout, MoveTo(0, row.saturating_sub(1)))?;
+        self.stdout.write_all(padded.as_bytes())?;
+        Ok(())
     }
 
-    pub fn write_status(&self, content: &str) -> io::Result<()> {
+    pub fn write_status(&mut self, content: &str) -> io::Result<()> {
         let row = self.rows.saturating_sub(1);
         self.write_line(row, content)
     }
 
-    pub fn flush(&self) -> io::Result<()> {
-        stdout().flush()
+    pub fn flush(&mut self) -> io::Result<()> {
+        self.stdout.flush()
     }
 }
 

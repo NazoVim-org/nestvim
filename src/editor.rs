@@ -1086,10 +1086,6 @@ impl Editor {
             KeyCode::Enter => {
                 let cmd = self.state.command_buffer.trim().to_string();
                 self.state.command_buffer.clear();
-                let prev_mode = self.state.mode;
-                self.state.mode = Mode::Normal;
-                self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Normal });
-                self.needs_render = true;
                 
                 match cmd.as_str() {
                     "q" => {
@@ -1152,6 +1148,13 @@ impl Editor {
                             eprintln!("[editor] Unknown command: {}", cmd);
                         }
                     }
+                }
+
+                if !self.state.has_confirmation() {
+                    let prev_mode = self.state.mode;
+                    self.state.mode = Mode::Normal;
+                    self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Normal });
+                    self.needs_render = true;
                 }
             }
             KeyCode::Esc => {

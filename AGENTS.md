@@ -19,7 +19,7 @@ Rust TUI Vim-like editor (nestvim v0.1.0). Single Cargo package, edition 2021.
 
 ## Structure
 - Entry: `src/main.rs` (tokio + clap CLI)
-- Plugins: `src/plugins/` (Lua, loaded via `dynamic-plugin` crate)
+- Plugins: `src/plugins/` (multi-language: mlua, rust_lisp, quickjs-rusty, libloading)
 - Syntax highlighting: `src/highlight/` (syntect)
 - Text buffers: `ropey` crate
 - TUI: `crossterm` crate

@@ -29,6 +29,7 @@ pub struct EditorState {
     pub cursor: Position,
     pub file_path: Option<PathBuf>,
     pub dirty: bool,
+    pub command_buffer: String,
 }
 
 impl Default for EditorState {
@@ -38,6 +39,7 @@ impl Default for EditorState {
             cursor: Position { line: 1, col: 0 },
             file_path: None,
             dirty: false,
+            command_buffer: String::new(),
         }
     }
 }

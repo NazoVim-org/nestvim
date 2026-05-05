@@ -1,6 +1,6 @@
 use atty;
 use crossterm::{
-    cursor::{Hide, MoveTo, Show},
+    cursor::{MoveTo, Show},
     execute,
     terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, size},
 };
@@ -28,14 +28,14 @@ impl Terminal {
         }
         crossterm::terminal::enable_raw_mode()?;
         let mut stdout = stdout();
-        execute!(stdout, EnterAlternateScreen, Hide)?;
+        execute!(stdout, EnterAlternateScreen, Show)?;
         self.update_size();
         Ok(())
     }
 
     pub fn disable_raw_mode(&self) -> io::Result<()> {
         let mut stdout = stdout();
-        execute!(stdout, Show, LeaveAlternateScreen)?;
+        execute!(stdout, LeaveAlternateScreen)?;
         crossterm::terminal::disable_raw_mode()?;
         Ok(())
     }

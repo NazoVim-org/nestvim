@@ -1,6 +1,6 @@
 use crate::buffer::TextBuffer;
 use crate::terminal::Terminal;
-use crate::types::EditorState;
+use crate::types::{EditorState, Mode};
 
 pub struct Renderer {
     scroll_top: usize,
@@ -43,16 +43,20 @@ impl Renderer {
         }
 
         // Status line
-        let status = format!(
-            "-- {} -- {} {}",
-            state.mode,
-            state.file_path.as_ref().map_or("[No Name]", |p| p.to_str().unwrap_or("[Invalid Path]")),
-            if state.dirty { "[+]" } else { "" }
-        );
+        let status = if state.mode == Mode::Command {
+            format!(":{}", state.command_buffer)
+        } else {
+            format!(
+                "-- {} -- {} {}",
+                state.mode,
+                state.file_path.as_ref().map_or("[No Name]", |p| p.to_str().unwrap_or("[Invalid Path]")),
+                if state.dirty { "[+]" } else { "" }
+            )
+        };
         let _ = terminal.write_status(&status);
 
         // Move cursor
-        let screen_row = (state.cursor.line - self.scroll_top + 1) as u16;
+        let screen_row = (state.cursor.line.saturating_sub(self.scroll_top) + 1) as u16;
         let _ = terminal.move_cursor(screen_row, (state.cursor.col + 1) as u16);
         let _ = terminal.flush();
     }

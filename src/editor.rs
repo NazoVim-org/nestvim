@@ -6,7 +6,7 @@ use crate::terminal::Terminal;
 use crate::types::{EditorState, Mode, PluginEvent};
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
 use futures::StreamExt;
-use std::io::{self, Write};
+use std::io;
 use tokio::time::{interval, Duration};
 
 pub struct Editor {
@@ -17,7 +17,6 @@ pub struct Editor {
     plugin_manager: PluginManager,
     state: EditorState,
     running: bool,
-    command_buffer: String,
     cleaned: bool,
 }
 
@@ -64,6 +63,7 @@ impl Editor {
             cursor: crate::types::Position { line: 1, col: 0 },
             file_path: buffer.file_path.clone(),
             dirty: false,
+            command_buffer: String::new(),
         };
         
         Ok(Self {
@@ -74,7 +74,6 @@ impl Editor {
             plugin_manager,
             state,
             running: false,
-            command_buffer: String::new(),
             cleaned: false,
         })
     }
@@ -157,8 +156,7 @@ impl Editor {
             KeyCode::Char(':') => {
                 let prev_mode = self.state.mode;
                 self.state.mode = Mode::Command;
-                self.command_buffer.clear();
-                let _ = self.terminal.write_status(":");
+                self.state.command_buffer.clear();
                 self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Command });
             }
             _ => {}
@@ -207,8 +205,8 @@ impl Editor {
     async fn handle_command(&mut self, key: KeyCode) {
         match key {
             KeyCode::Enter => {
-                let cmd = self.command_buffer.trim().to_string();
-                self.command_buffer.clear();
+                let cmd = self.state.command_buffer.trim().to_string();
+                self.state.command_buffer.clear();
                 let prev_mode = self.state.mode;
                 self.state.mode = Mode::Normal;
                 self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Normal });
@@ -240,19 +238,16 @@ impl Editor {
                 }
             }
             KeyCode::Esc => {
-                self.command_buffer.clear();
+                self.state.command_buffer.clear();
                 let prev_mode = self.state.mode;
                 self.state.mode = Mode::Normal;
                 self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Normal });
             }
             KeyCode::Backspace => {
-                self.command_buffer.pop();
+                self.state.command_buffer.pop();
             }
             KeyCode::Char(c) => {
-                self.command_buffer.push(c);
-                let mut stdout = std::io::stdout();
-                let _ = write!(stdout, "{}", c);
-                let _ = stdout.flush();
+                self.state.command_buffer.push(c);
             }
             _ => {}
         }

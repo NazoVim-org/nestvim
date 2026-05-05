@@ -6,6 +6,7 @@ mod register;
 mod renderer;
 mod terminal;
 mod types;
+mod undo;
 
 use crate::editor::Editor;
 use clap::Parser;

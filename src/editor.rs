@@ -4,7 +4,8 @@ use crate::plugin::PluginManager;
 use crate::register::Register;
 use crate::renderer::Renderer;
 use crate::terminal::Terminal;
-use crate::types::{EditorState, Mode, PluginEvent, VisualType};
+use crate::types::{EditorState, Mode, PluginEvent, SearchDirection, SearchResult, VisualType};
+use crate::undo::UndoManager;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind};
 use futures::StreamExt;
 use std::io;
@@ -17,6 +18,7 @@ pub struct Editor {
     renderer: Renderer,
     plugin_manager: PluginManager,
     register: Register,
+    undo_manager: UndoManager,
     state: EditorState,
     running: bool,
     last_highlight_mod_count: usize,
@@ -24,6 +26,12 @@ pub struct Editor {
     needs_render: bool,
     pending_operator: Option<char>,
     pending_register: Option<char>,
+    pending_mark: Option<char>,
+    pending_macro_play: Option<char>,
+    search_query: String,
+    search_direction: SearchDirection,
+    search_results: Vec<SearchResult>,
+    current_search_idx: usize,
 }
 
 impl Editor {
@@ -58,6 +66,8 @@ impl Editor {
         
         let register = Register::new();
         
+        let undo_manager = UndoManager::new();
+        
         let state = EditorState {
             mode: Mode::Normal,
             cursor: crate::types::Position { line: 1, col: 0 },
@@ -66,6 +76,8 @@ impl Editor {
             command_buffer: String::new(),
             visual_start: None,
             visual_type: None,
+            marks: crate::types::Marks::new(),
+            macros: crate::types::Macros::new(),
         };
         
         Ok(Self {
@@ -75,6 +87,7 @@ impl Editor {
             renderer,
             plugin_manager,
             register,
+            undo_manager,
             state,
             running: false,
             last_highlight_mod_count: 0,
@@ -82,6 +95,12 @@ impl Editor {
             needs_render: true,
             pending_operator: None,
             pending_register: None,
+            pending_mark: None,
+            pending_macro_play: None,
+            search_query: String::new(),
+            search_direction: SearchDirection::Forward,
+            search_results: Vec::new(),
+            current_search_idx: 0,
         })
     }
     
@@ -192,6 +211,34 @@ impl Editor {
                 self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Command });
                 self.needs_render = true;
             }
+            KeyCode::Char('/') => {
+                let prev_mode = self.state.mode;
+                self.state.mode = Mode::Command;
+                self.state.command_buffer.clear();
+                self.state.command_buffer.push('/');
+                self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Command });
+                self.needs_render = true;
+            }
+            KeyCode::Char('*') => {
+                self.search_word_under_cursor();
+                self.needs_render = true;
+            }
+            KeyCode::Char('n') => {
+                self.search_next();
+                self.needs_render = true;
+            }
+            KeyCode::Char('N') => {
+                self.search_prev();
+                self.needs_render = true;
+            }
+            KeyCode::Char('u') => {
+                self.undo();
+            }
+            KeyCode::Char('r') => {
+                if self.state.command_buffer.is_empty() {
+                    self.redo();
+                }
+            }
             KeyCode::Char('v') => {
                 let prev_mode = self.state.mode;
                 self.state.mode = Mode::Visual;
@@ -222,6 +269,53 @@ impl Editor {
             }
             KeyCode::Char('"') => {
                 self.pending_register = Some('"');
+            }
+            KeyCode::Char('m') => {
+                self.pending_mark = Some('m');
+            }
+            KeyCode::Char('`') => {
+                self.pending_mark = Some('`');
+            }
+            KeyCode::Char('\'') => {
+                self.pending_mark = Some('\'');
+            }
+            KeyCode::Char('q') => {
+                if let KeyCode::Char(c) = key {
+                    if c >= 'a' && c <= 'z' {
+                        self.toggle_macro_recording(c);
+                        self.needs_render = true;
+                        return;
+                    }
+                }
+            }
+            KeyCode::Char('@') => {
+                self.pending_macro_play = Some('@');
+            }
+            _ => {
+                if let Some(pending) = self.pending_macro_play {
+                    if let KeyCode::Char(c) = key {
+                        if c >= 'a' && c <= 'z' {
+                            self.play_macro(c);
+                            self.pending_macro_play = None;
+                            self.needs_render = true;
+                            return;
+                        }
+                    }
+                    self.pending_macro_play = None;
+                }
+            }
+            _ => {
+                if let Some(pending) = self.pending_mark {
+                    if let KeyCode::Char(c) = key {
+                        if (pending == 'm' && c >= 'a' && c <= 'z') || (pending == '`' || pending == '\'') {
+                            self.handle_mark(pending, c);
+                            self.pending_mark = None;
+                            self.needs_render = true;
+                            return;
+                        }
+                    }
+                    self.pending_mark = None;
+                }
             }
             _ => {
                 if let Some(_r) = self.pending_register {
@@ -268,6 +362,12 @@ impl Editor {
                     KeyCode::Char('e') => {
                         self.yank_word_end(register);
                     }
+                    KeyCode::Char('i') => {
+                        self.handle_text_object(key, register, true).await;
+                    }
+                    KeyCode::Char('a') => {
+                        self.handle_text_object(key, register, false).await;
+                    }
                     _ => {}
                 }
             }
@@ -279,11 +379,48 @@ impl Editor {
                     KeyCode::Char('w') => {
                         self.delete_word(register);
                     }
+                    KeyCode::Char('i') => {
+                        self.handle_text_object(key, register, true).await;
+                    }
+                    KeyCode::Char('a') => {
+                        self.handle_text_object(key, register, false).await;
+                    }
                     _ => {}
                 }
             }
             _ => {}
         }
+    }
+    
+    async fn handle_text_object(&mut self, key: KeyCode, register: char, inner: bool) {
+        match key {
+            KeyCode::Char('w') => {
+                if inner {
+                    let (word, start, _) = self.buffer.get_word_range(self.state.cursor.line, self.state.cursor.col);
+                    if !word.is_empty() {
+                        let char_start = self.buffer.line_to_char(self.state.cursor.line - 1) + start;
+                        let char_end = char_start + word.len();
+                        let content = self.buffer.get_char_range(self.state.cursor.line, start, self.state.cursor.line, start + word.len());
+                        self.register.set(register, &content);
+                        self.buffer.remove_range(char_start, char_end);
+                    }
+                } else {
+                    let (word, start, end) = self.buffer.get_word_range(self.state.cursor.line, self.state.cursor.col);
+                    if !word.is_empty() {
+                        let mut search_start = start;
+                        while search_start > 0 {
+                            search_start -= 1;
+                        }
+                        let mut search_end = end;
+                        while search_end < self.buffer.get_line(self.state.cursor.line).len() {
+                            search_end += 1;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        self.needs_render = true;
     }
     
     async fn execute_operator_with_register(&mut self, op: char, register: char, _key: KeyCode) {
@@ -551,6 +688,130 @@ impl Editor {
     
     fn on_buffer_modified(&mut self) {
         self.plugin_manager.emit(PluginEvent::BufferChange);
+        self.needs_render = true;
+    }
+    
+    fn undo(&mut self) {
+        if let Some(edit) = self.undo_manager.undo(&mut self.buffer) {
+            self.state.cursor = edit.cursor_before;
+            self.needs_render = true;
+        }
+    }
+    
+    fn redo(&mut self) {
+        if let Some(edit) = self.undo_manager.redo(&mut self.buffer) {
+            self.state.cursor = edit.cursor_after;
+            self.needs_render = true;
+        }
+    }
+    
+    fn search_word_under_cursor(&mut self) {
+        let (word, _, _) = self.buffer.get_word_range(self.state.cursor.line, self.state.cursor.col);
+        if !word.is_empty() {
+            let query = word.clone();
+            self.do_search(&query, SearchDirection::Forward);
+        }
+    }
+    
+    fn search_next(&mut self) {
+        if !self.search_query.is_empty() {
+            let query = self.search_query.clone();
+            let dir = self.search_direction;
+            self.do_search(&query, dir);
+        }
+    }
+    
+    fn search_prev(&mut self) {
+        if !self.search_query.is_empty() {
+            let query = self.search_query.clone();
+            let dir = match self.search_direction {
+                SearchDirection::Forward => SearchDirection::Backward,
+                SearchDirection::Backward => SearchDirection::Forward,
+            };
+            self.do_search(&query, dir);
+        }
+    }
+    
+    fn do_search(&mut self, query: &str, direction: SearchDirection) {
+        self.search_query = query.to_string();
+        self.search_direction = direction;
+        self.search_results = self.buffer.search(query);
+        
+        if self.search_results.is_empty() {
+            return;
+        }
+        
+        if direction == SearchDirection::Forward {
+            self.current_search_idx = self.search_results.iter()
+                .position(|r| r.line > self.state.cursor.line || (r.line == self.state.cursor.line && r.start_col > self.state.cursor.col))
+                .unwrap_or(0);
+        } else {
+            self.current_search_idx = self.search_results.iter()
+                .rposition(|r| r.line < self.state.cursor.line || (r.line == self.state.cursor.line && r.start_col < self.state.cursor.col))
+                .unwrap_or(self.search_results.len() - 1);
+        }
+        
+        if let Some(result) = self.search_results.get(self.current_search_idx) {
+            self.state.cursor.line = result.line;
+            self.state.cursor.col = result.start_col;
+        }
+    }
+    
+    fn handle_mark(&mut self, action: char, name: char) {
+        if action == 'm' {
+            self.state.marks.set(name, self.state.cursor);
+        } else if let Some(pos) = self.state.marks.get(name) {
+            self.state.cursor = pos;
+        }
+    }
+    
+    fn toggle_macro_recording(&mut self, name: char) {
+        if self.state.macros.is_recording() {
+            self.state.macros.stop_recording();
+        } else {
+            self.state.macros.start_recording(name);
+        }
+    }
+    
+    fn play_macro(&mut self, name: char) {
+        let keys = self.state.macros.get(name).cloned();
+        if let Some(keys) = keys {
+            for key_str in keys {
+                self.execute_macro_key(&key_str);
+            }
+        }
+    }
+    
+    fn execute_macro_key(&mut self, key_str: &str) {
+        use crossterm::event::KeyCode;
+        let key = match key_str {
+            "h" => KeyCode::Char('h'),
+            "j" => KeyCode::Char('j'),
+            "k" => KeyCode::Char('k'),
+            "l" => KeyCode::Char('l'),
+            "i" => KeyCode::Char('i'),
+            "a" => KeyCode::Char('a'),
+            "x" => KeyCode::Char('x'),
+            "dd" => KeyCode::Char('d'),
+            "yy" => KeyCode::Char('y'),
+            _ => return,
+        };
+        match key {
+            KeyCode::Char('j') => {
+                self.state.cursor.line = (self.state.cursor.line + 1).min(self.buffer.line_count());
+            }
+            KeyCode::Char('k') => {
+                self.state.cursor.line = self.state.cursor.line.saturating_sub(1).max(1);
+            }
+            KeyCode::Char('h') => {
+                self.state.cursor.col = self.state.cursor.col.saturating_sub(1);
+            }
+            KeyCode::Char('l') => {
+                let line_len = self.buffer.get_line(self.state.cursor.line).len();
+                self.state.cursor.col = (self.state.cursor.col + 1).min(line_len.saturating_sub(1));
+            }
+            _ => {}
+        }
         self.needs_render = true;
     }
     

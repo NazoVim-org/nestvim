@@ -270,6 +270,45 @@ impl TextBuffer {
             self.modification_count += 1;
         }
     }
+    
+    #[allow(dead_code)]
+    pub fn search(&self, query: &str) -> Vec<crate::types::SearchResult> {
+        if query.is_empty() {
+            return Vec::new();
+        }
+        
+        let query_chars: Vec<char> = query.chars().collect();
+        let mut results = Vec::new();
+        
+        for line_idx in 0..self.doc.len_lines() {
+            let line = self.doc.line(line_idx);
+            let line_str = line.to_string();
+            let line_chars: Vec<char> = line_str.chars().collect();
+            
+            let mut col = 0;
+            while col <= line_chars.len().saturating_sub(query_chars.len()) {
+                let mut matches = true;
+                for (i, &qc) in query_chars.iter().enumerate() {
+                    if col + i >= line_chars.len() || line_chars[col + i] != qc {
+                        matches = false;
+                        break;
+                    }
+                }
+                if matches {
+                    results.push(crate::types::SearchResult {
+                        line: line_idx + 1,
+                        start_col: col,
+                        end_col: col + query_chars.len(),
+                    });
+                    col += 1;
+                } else {
+                    col += 1;
+                }
+            }
+        }
+        
+        results
+    }
 }
 
 impl Default for TextBuffer {

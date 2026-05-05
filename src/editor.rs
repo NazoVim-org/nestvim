@@ -592,9 +592,11 @@ impl Editor {
             }
             KeyCode::Backspace => {
                 self.state.command_buffer.pop();
+                self.needs_render = true;
             }
             KeyCode::Char(c) => {
                 self.state.command_buffer.push(c);
+                self.needs_render = true;
             }
             _ => {}
         }

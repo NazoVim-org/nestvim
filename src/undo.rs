@@ -2,6 +2,7 @@ use crate::buffer::TextBuffer;
 use crate::types::Position;
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub enum EditType {
     Insert { line: usize, col: usize, text: String },
     Delete { line: usize, col: usize, text: String },
@@ -22,6 +23,7 @@ pub struct Edit {
 pub struct UndoManager {
     undo_stack: Vec<Edit>,
     redo_stack: Vec<Edit>,
+    #[allow(dead_code)]
     max_size: usize,
 }
 
@@ -34,6 +36,7 @@ impl UndoManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn push(&mut self, edit: Edit) {
         if self.undo_stack.len() >= self.max_size {
             self.undo_stack.remove(0);
@@ -101,7 +104,7 @@ impl UndoManager {
                 buffer.insert(*line, *col, text);
             }
             EditType::Delete { line, col, text } => {
-                for i in 0..text.len() {
+                for _ in 0..text.len() {
                     buffer.delete(*line, *col);
                 }
             }
@@ -127,14 +130,17 @@ impl UndoManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn can_undo(&self) -> bool {
         !self.undo_stack.is_empty()
     }
 
+    #[allow(dead_code)]
     pub fn can_redo(&self) -> bool {
         !self.redo_stack.is_empty()
     }
 
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.undo_stack.clear();
         self.redo_stack.clear();

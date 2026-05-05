@@ -292,7 +292,7 @@ impl Editor {
                 self.pending_macro_play = Some('@');
             }
             _ => {
-                if let Some(pending) = self.pending_macro_play {
+                if let Some(_pending) = self.pending_macro_play {
                     if let KeyCode::Char(c) = key {
                         if c >= 'a' && c <= 'z' {
                             self.play_macro(c);
@@ -303,8 +303,6 @@ impl Editor {
                     }
                     self.pending_macro_play = None;
                 }
-            }
-            _ => {
                 if let Some(pending) = self.pending_mark {
                     if let KeyCode::Char(c) = key {
                         if (pending == 'm' && c >= 'a' && c <= 'z') || (pending == '`' || pending == '\'') {
@@ -316,8 +314,6 @@ impl Editor {
                     }
                     self.pending_mark = None;
                 }
-            }
-            _ => {
                 if let Some(_r) = self.pending_register {
                     if let KeyCode::Char(c) = key {
                         if c >= 'a' && c <= 'z' {

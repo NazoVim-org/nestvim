@@ -30,9 +30,11 @@ pub enum VisualType {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct SearchResult {
     pub line: usize,
     pub start_col: usize,
+    #[allow(dead_code)]
     pub end_col: usize,
 }
 
@@ -81,6 +83,7 @@ pub fn start_recording(&mut self, name: char) {
         self.recording.take()
     }
     
+    #[allow(dead_code)]
     pub fn add_key(&mut self, key: String) {
         if let Some(name) = self.recording {
             if let Some(keys) = self.macros.get_mut(&name) {

@@ -50,6 +50,7 @@ impl Register {
         }
     }
 
+    #[allow(dead_code)]
     fn get_system_clipboard(&self) -> Option<String> {
         if let Ok(mut clipboard) = self.system_clipboard.lock() {
             if let Some(ref mut cb) = *clipboard {
@@ -59,6 +60,7 @@ impl Register {
         None
     }
 
+    #[allow(dead_code)]
     pub fn get_with_clipboard(&self, name: char) -> String {
         if name == '+' {
             self.get_system_clipboard().unwrap_or_else(|| self.get(name))
@@ -67,6 +69,7 @@ impl Register {
         }
     }
 
+    #[allow(dead_code)]
     pub fn append(&mut self, name: char, content: &str) {
         let reg = name.to_ascii_lowercase();
         let current = self.get(reg);

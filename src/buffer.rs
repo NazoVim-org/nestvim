@@ -80,14 +80,13 @@ impl TextBuffer {
             return 0;
         }
         
-        let prev_line_idx = line - 2; // 0-indexed previous line
-        let cur_line_idx = line - 1; // 0-indexed current line
+        let prev_line_idx = line - 2;
+        let cur_line_idx = line - 1;
         
         if prev_line_idx >= self.doc.len_lines() || cur_line_idx >= self.doc.len_lines() {
             return 0;
         }
         
-        // Find the newline at the end of the previous line
         let prev_line_start = self.doc.line_to_char(prev_line_idx);
         let prev_line_len = self.doc.line(prev_line_idx).len_chars();
         let newline_pos = prev_line_start + prev_line_len - 1;
@@ -96,12 +95,10 @@ impl TextBuffer {
             return 0;
         }
         
-        // Remove the newline between lines
         self.doc.remove(newline_pos..newline_pos + 1);
         self.dirty = true;
         self.modification_count += 1;
         
-        // Return the new cursor column (end of merged line)
         prev_line_len - 1
     }
 
@@ -135,37 +132,12 @@ impl TextBuffer {
         self.doc.line_to_char(line_idx)
     }
 
+    #[allow(dead_code)]
     pub fn len_chars(&self) -> usize {
         self.doc.len_chars()
     }
 
-    pub fn remove_range(&mut self, start: usize, end: usize) {
-        if start < end {
-            self.doc.remove(start..end);
-            self.dirty = true;
-            self.modification_count += 1;
-        }
-    }
-
-    pub fn get_line_range(&self, start_line: usize, end_line: usize) -> String {
-        if start_line > end_line || start_line < 1 {
-            return String::new();
-        }
-        let start = start_line.saturating_sub(1);
-        let end = end_line.min(self.doc.len_lines());
-        if start >= end {
-            return String::new();
-        }
-        let mut result = String::new();
-        for i in start..end {
-            result.push_str(&self.doc.line(i).to_string());
-            if i < end - 1 {
-                result.push('\n');
-            }
-        }
-        result
-    }
-
+    #[allow(dead_code)]
     pub fn get_word_at(&self, line: usize, col: usize) -> (String, usize, usize) {
         let line_idx = line.saturating_sub(1);
         if line_idx >= self.doc.len_lines() {
@@ -192,6 +164,7 @@ impl TextBuffer {
         (word, start, end)
     }
 
+    #[allow(dead_code)]
     pub fn get_word_at_cursor(&self, line: usize, col: usize) -> String {
         let (word, _, _) = self.get_word_at(line, col);
         word
@@ -199,6 +172,26 @@ impl TextBuffer {
 
     pub fn get_word_range(&self, line: usize, col: usize) -> (String, usize, usize) {
         self.get_word_at(line, col)
+    }
+
+    #[allow(dead_code)]
+    pub fn get_line_range(&self, start_line: usize, end_line: usize) -> String {
+        if start_line > end_line || start_line < 1 {
+            return String::new();
+        }
+        let start = start_line.saturating_sub(1);
+        let end = end_line.min(self.doc.len_lines());
+        if start >= end {
+            return String::new();
+        }
+        let mut result = String::new();
+        for i in start..end {
+            result.push_str(&self.doc.line(i).to_string());
+            if i < end - 1 {
+                result.push('\n');
+            }
+        }
+        result
     }
 
     pub fn get_char_range(&self, start_line: usize, start_col: usize, end_line: usize, end_col: usize) -> String {
@@ -220,7 +213,7 @@ impl TextBuffer {
             result.push_str(&self.get_line(line_num));
             result.push('\n');
         }
-        result.push_str(&self.get_line(end_col).chars().take(end_col).collect::<String>());
+        result.push_str(&self.get_line(end_line).chars().take(end_col).collect::<String>());
         result
     }
 
@@ -268,6 +261,15 @@ impl TextBuffer {
 
         content
     }
+
+    #[allow(dead_code)]
+    pub fn remove_range(&mut self, start: usize, end: usize) {
+        if start < end {
+            self.doc.remove(start..end);
+            self.dirty = true;
+            self.modification_count += 1;
+        }
+    }
 }
 
 impl Default for TextBuffer {
@@ -301,7 +303,6 @@ mod tests {
     fn test_merge_with_prev_line() {
         let mut buf = TextBuffer::with_text("hello\nworld\n");
         let col = buf.merge_with_prev_line(2);
-        // Check content is merged correctly
         assert_eq!(buf.to_string(), "helloworld\n");
         assert!(buf.dirty);
     }
@@ -310,7 +311,6 @@ mod tests {
     fn test_save_resets_dirty() {
         let mut buf = TextBuffer::with_text("test\n");
         buf.file_path = Some(std::path::PathBuf::from("/tmp/test_nestvim.txt"));
-        // Use tokio runtime to run async save
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             buf.save_file().await.expect("Save failed");

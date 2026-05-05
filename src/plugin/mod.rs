@@ -107,6 +107,7 @@ impl PluginManager {
         self.plugins.push(plugin);
     }
 
+    #[allow(dead_code)]
     pub fn api(&self) -> &Rc<PluginApi> {
         &self.api
     }

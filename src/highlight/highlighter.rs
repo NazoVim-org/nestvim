@@ -6,8 +6,12 @@ use syntect::{
 };
 
 pub struct Highlighter {
+    #[allow(dead_code)]
     syntax_set: SyntaxSet,
+    #[allow(dead_code)]
     theme_set: ThemeSet,
+    #[allow(dead_code)]
+    dirty: bool,
 }
 
 impl Highlighter {
@@ -15,7 +19,7 @@ impl Highlighter {
         let syntax_set = SyntaxSet::load_defaults_newlines();
         let theme_set = ThemeSet::load_defaults();
         
-        Self { syntax_set, theme_set }
+        Self { syntax_set, theme_set, dirty: false }
     }
 
     pub fn update(&self, text: &str, file_path: Option<&std::path::Path>) -> Vec<Vec<(syntect::highlighting::Style, String)>> {

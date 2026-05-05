@@ -2,6 +2,7 @@ use crate::plugin::{Plugin, PluginApi};
 use crate::types::PluginEvent;
 use std::path::Path;
 
+#[allow(dead_code)]
 pub struct LuaPlugin {
     name: String,
 }
@@ -20,6 +21,7 @@ impl Plugin for LuaPlugin {
     }
 }
 
+#[allow(dead_code)]
 pub fn load_lua_plugin(path: &Path, _api: std::rc::Rc<PluginApi>) -> Result<Box<dyn Plugin>, String> {
     let code = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;

@@ -130,6 +130,10 @@ impl Editor {
     }
     
     async fn handle_key(&mut self, key: KeyCode) {
+        if let KeyCode::Char(c) = key {
+            self.plugin_manager.emit(PluginEvent::Key { mode: self.state.mode, key: c });
+        }
+        
         match self.state.mode {
             Mode::Normal => self.handle_normal(key).await,
             Mode::Insert => self.handle_insert(key).await,
@@ -213,7 +217,7 @@ impl Editor {
                 self.pending_register = Some('"');
             }
             _ => {
-                if let Some(r) = self.pending_register {
+                if let Some(_r) = self.pending_register {
                     if let KeyCode::Char(c) = key {
                         if c >= 'a' && c <= 'z' {
                             self.pending_register = Some(c);
@@ -497,6 +501,7 @@ impl Editor {
         }
     }
     
+    #[allow(dead_code)]
     fn line_to_char(&self, line_idx: usize) -> usize {
         self.buffer.line_to_char(line_idx)
     }

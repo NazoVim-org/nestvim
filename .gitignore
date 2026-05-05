@@ -13,6 +13,7 @@ Cargo.lock
 # IDE
 .vscode/
 .idea/
+.omc/
 
 # Editors
 *.swp
@@ -22,4 +23,3 @@ Cargo.lock
 # OS
 .DS_Store
 Thumbs.db
-.omc/

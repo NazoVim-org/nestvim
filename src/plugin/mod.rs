@@ -17,10 +17,6 @@ impl PluginManager {
         // TODO: emit events to plugins
     }
     
-    pub fn handle_key(&self, _mode: crate::types::Mode, _key: char) -> bool {
-        false
-    }
-    
     pub fn execute_command(&self, _cmd: &str) -> bool {
         false
     }

@@ -11,10 +11,6 @@ impl Renderer {
         Self { scroll_top: 1 }
     }
 
-    pub fn reset_scroll(&mut self) {
-        self.scroll_top = 1;
-    }
-
     pub fn render(&mut self, terminal: &Terminal, buffer: &TextBuffer, state: &EditorState) {
         let rows = terminal.rows() as usize;
         let visible_rows = rows.saturating_sub(2); // Status bar

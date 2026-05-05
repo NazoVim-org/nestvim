@@ -45,6 +45,7 @@ impl Default for EditorState {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum PluginEvent {
     ModeChange { from: Mode, to: Mode },
     BufferChange,

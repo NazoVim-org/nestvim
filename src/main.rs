@@ -20,7 +20,7 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt().try_init();
     
     let cli = Cli::parse();
     

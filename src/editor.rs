@@ -17,17 +17,11 @@ pub struct Editor {
     plugin_manager: PluginManager,
     state: EditorState,
     running: bool,
-    cleaned: bool,
 }
 
 impl Editor {
     pub async fn new(file_path: Option<&str>) -> Result<Self, Box<dyn std::error::Error>> {
         let mut terminal = Terminal::new()?;
-        
-        // Check if we're in a terminal
-        if !atty::is(atty::Stream::Stdin) {
-            return Err("Not running in a terminal. Please run nestvim in a real terminal.".into());
-        }
         
         terminal.enable_raw_mode()?;
         
@@ -47,9 +41,6 @@ impl Editor {
         };
         
         let highlighter = Highlighter::new();
-        if let Err(e) = highlighter.init().await {
-            eprintln!("Warning: Highlighter init failed: {}", e);
-        }
         
         let mut plugin_manager = PluginManager::new();
         if let Err(e) = plugin_manager.load_all() {
@@ -74,7 +65,6 @@ impl Editor {
             plugin_manager,
             state,
             running: false,
-            cleaned: false,
         })
     }
     
@@ -82,7 +72,7 @@ impl Editor {
         self.running = true;
         
         // Initial render
-        self.highlighter.update(&self.buffer.to_string(), self.state.file_path.as_deref()).await;
+        let _ = self.highlighter.update(&self.buffer.to_string(), self.state.file_path.as_deref());
         self.renderer.render(&self.terminal, &self.buffer, &self.state);
         
         // Event loop
@@ -111,11 +101,10 @@ impl Editor {
                 }
             }
             
-            self.highlighter.update(&self.buffer.to_string(), self.state.file_path.as_deref()).await;
+            let _ = self.highlighter.update(&self.buffer.to_string(), self.state.file_path.as_deref());
             self.renderer.render(&self.terminal, &self.buffer, &self.state);
         }
         
-        self.cleanup();
         Ok(())
     }
     
@@ -175,31 +164,31 @@ impl Editor {
                 if self.state.cursor.col > 0 {
                     self.buffer.delete(self.state.cursor.line, self.state.cursor.col - 1);
                     self.state.cursor.col -= 1;
-                    self.plugin_manager.emit(PluginEvent::BufferChange);
-                    self.highlighter.mark_dirty();
+                    self.on_buffer_modified();
                 } else if self.state.cursor.line > 1 {
                     let new_col = self.buffer.merge_with_prev_line(self.state.cursor.line);
                     self.state.cursor.line -= 1;
                     self.state.cursor.col = new_col;
-                    self.plugin_manager.emit(PluginEvent::BufferChange);
-                    self.highlighter.mark_dirty();
+                    self.on_buffer_modified();
                 }
             }
             KeyCode::Enter => {
                 self.buffer.insert(self.state.cursor.line, self.state.cursor.col, "\n");
                 self.state.cursor.line += 1;
                 self.state.cursor.col = 0;
-                self.plugin_manager.emit(PluginEvent::BufferChange);
-                self.highlighter.mark_dirty();
+                self.on_buffer_modified();
             }
             KeyCode::Char(c) => {
                 self.buffer.insert_char(self.state.cursor.line, self.state.cursor.col, c);
                 self.state.cursor.col += 1;
-                self.plugin_manager.emit(PluginEvent::BufferChange);
-                self.highlighter.mark_dirty();
+                self.on_buffer_modified();
             }
             _ => {}
         }
+    }
+    
+    fn on_buffer_modified(&mut self) {
+        self.plugin_manager.emit(PluginEvent::BufferChange);
     }
     
     async fn handle_command(&mut self, key: KeyCode) {
@@ -251,19 +240,5 @@ impl Editor {
             }
             _ => {}
         }
-    }
-    
-    fn cleanup(&mut self) {
-        if self.cleaned {
-            return;
-        }
-        self.cleaned = true;
-        let _ = self.terminal.disable_raw_mode();
-    }
-}
-
-impl Drop for Editor {
-    fn drop(&mut self) {
-        self.cleanup();
     }
 }

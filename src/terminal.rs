@@ -51,10 +51,6 @@ impl Terminal {
         self.rows
     }
 
-    pub fn cols(&self) -> u16 {
-        self.cols
-    }
-
     pub fn move_cursor(&self, row: u16, col: u16) -> io::Result<()> {
         let mut stdout = stdout();
         execute!(stdout, MoveTo(col.saturating_sub(1), row.saturating_sub(1)))
@@ -68,19 +64,15 @@ impl Terminal {
     pub fn write_line(&self, row: u16, content: &str) -> io::Result<()> {
         let mut stdout = stdout();
         let cols = self.cols as usize;
-        
-        // Strip ANSI escape codes for width calculation
-        let visible: String = content.chars()
-            .filter(|c| *c != '\x1b')
-            .collect();
-        
-        let visible_width = visible.chars().count();
+
+        let stripped = strip_ansi(content);
+        let visible_width = stripped.chars().count();
         let padded = if visible_width < cols {
             format!("{}{}", content, " ".repeat(cols - visible_width))
         } else {
             content.chars().take(cols).collect()
         };
-        
+
         execute!(stdout, MoveTo(0, row.saturating_sub(1)))?;
         stdout.write_all(padded.as_bytes())?;
         stdout.flush()
@@ -100,4 +92,24 @@ impl Drop for Terminal {
     fn drop(&mut self) {
         let _ = self.disable_raw_mode();
     }
+}
+
+fn strip_ansi(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            // Skip ANSI escape sequence: ESC [ ... letter
+            if chars.next() == Some('[') {
+                for c2 in &mut chars {
+                    if c2.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
 }

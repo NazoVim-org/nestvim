@@ -62,7 +62,7 @@ impl Terminal {
     }
 
     pub fn clear_screen(&mut self) -> io::Result<()> {
-        execute!(self.stdout, Clear(ClearType::All))
+        execute!(self.stdout, Clear(ClearType::Purge))
     }
 
     pub fn write_line(&mut self, row: u16, content: &str) -> io::Result<()> {
@@ -86,6 +86,7 @@ impl Terminal {
         };
 
         execute!(self.stdout, MoveTo(0, row.saturating_sub(1)))?;
+        self.stdout.write_all(b"\x1b[2K")?;
         self.stdout.write_all(padded.as_bytes())?;
         Ok(())
     }

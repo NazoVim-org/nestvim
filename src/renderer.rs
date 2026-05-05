@@ -45,10 +45,10 @@ impl Renderer {
             0
         };
 
-        let status = if state.mode == Mode::Command {
-            format!(":{}", state.command_buffer)
-        } else if state.has_confirmation() {
+        let status = if state.has_confirmation() {
             state.confirmation_prompt.as_ref().unwrap().message.clone()
+        } else if state.mode == Mode::Command {
+            format!(":{}", state.command_buffer)
         } else if state.mode == Mode::Replace {
             let line = state.cursor.line;
             let col = state.cursor.col + 1;

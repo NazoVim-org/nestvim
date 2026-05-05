@@ -958,6 +958,7 @@ impl Editor {
         }
     }
     
+    #[allow(dead_code)]
     fn redo(&mut self) {
         if let Some(edit) = self.undo_manager.redo(&mut self.buffer) {
             self.state.cursor = edit.cursor_after;
@@ -1294,6 +1295,7 @@ impl Editor {
         }
     }
 
+    #[allow(dead_code)]
     fn page_down(&mut self) {
         let terminal_rows = self.terminal.rows() as usize;
         let line_count = self.buffer.line_count();
@@ -1302,6 +1304,7 @@ impl Editor {
         self.state.cursor.col = self.state.cursor.col.min(len.saturating_sub(1));
     }
 
+    #[allow(dead_code)]
     fn page_up(&mut self) {
         let terminal_rows = self.terminal.rows() as usize;
         self.state.cursor.line = self.state.cursor.line.saturating_sub(terminal_rows).max(1);
@@ -1390,7 +1393,7 @@ impl Editor {
         }
     }
 
-    fn delete_char(&mut self, register: char) {
+    fn delete_char(&mut self, _register: char) {
         let line = self.state.cursor.line;
         let col = self.state.cursor.col;
         let line_str = self.buffer.get_line(line);
@@ -1520,7 +1523,7 @@ impl Editor {
         }
         
         let current_line = self.buffer.get_line(line);
-        let next_line = self.buffer.get_line(line + 1);
+        let _next_line = self.buffer.get_line(line + 1);
         
         self.buffer.delete_line(line + 1);
         
@@ -1551,6 +1554,7 @@ impl Editor {
         self.state.cursor.line = (line_count.saturating_sub(visible_rows) + 1).max(1);
     }
 
+    #[allow(dead_code)]
     fn toggle_line_numbers(&mut self) {
         self.state.show_line_numbers = !self.state.show_line_numbers;
     }
@@ -1570,7 +1574,7 @@ impl Editor {
 
     fn show_file_info(&mut self) {
         let line_count = self.buffer.line_count();
-        let col = self.state.cursor.col + 1;
+        let _col = self.state.cursor.col + 1;
         let total = self.buffer.len_chars();
         let path = self.state.file_path.as_ref()
             .map(|p| p.to_str().unwrap_or(""))

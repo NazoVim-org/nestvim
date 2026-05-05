@@ -17,6 +17,7 @@ pub enum EditType {
 pub struct Edit {
     pub edit_type: EditType,
     pub cursor_before: Position,
+    #[allow(dead_code)]
     pub cursor_after: Position,
 }
 
@@ -52,6 +53,7 @@ impl UndoManager {
         Some(edit)
     }
 
+    #[allow(dead_code)]
     pub fn redo(&mut self, buffer: &mut TextBuffer) -> Option<Edit> {
         let edit = self.redo_stack.pop()?;
         self.undo_stack.push(edit.clone());
@@ -98,6 +100,7 @@ impl UndoManager {
         }
     }
 
+    #[allow(dead_code)]
     fn apply_redo(&self, buffer: &mut TextBuffer, edit: &Edit) {
         match &edit.edit_type {
             EditType::Insert { line, col, text } => {

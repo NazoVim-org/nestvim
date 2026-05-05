@@ -24,10 +24,12 @@ impl Renderer {
         }
     }
 
+    #[allow(dead_code)]
     pub fn set_show_line_numbers(&mut self, show: bool) {
         self.show_line_numbers = show;
     }
 
+    #[allow(dead_code)]
     pub fn toggle_line_numbers(&mut self) {
         self.show_line_numbers = !self.show_line_numbers;
     }

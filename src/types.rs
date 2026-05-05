@@ -159,6 +159,7 @@ pub enum PluginEvent {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub enum ConfirmAction {
     Quit,
     QuitDiscard,

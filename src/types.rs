@@ -1,4 +1,17 @@
 use std::path::PathBuf;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum NestvimError {
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Plugin error: {0}")]
+    Plugin(String),
+    #[error("Terminal error: {0}")]
+    Terminal(String),
+    #[error("No file path set")]
+    NoFilePath,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {

@@ -3,7 +3,7 @@ pub mod loaders;
 
 pub use api::{Plugin, PluginApi};
 
-use crate::types::PluginEvent;
+use crate::types::{PluginEvent, NestvimError};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -27,17 +27,27 @@ impl PluginManager {
         }
     }
 
-    pub fn load_all(&mut self) -> Result<(), String> {
-        let plugins_dir = std::path::Path::new("src/plugins");
+    pub fn load_all(&mut self) -> Result<(), NestvimError> {
+        let plugins_dir = if let Ok(dir) = std::env::var("NESTVIM_PLUGIN_DIR") {
+            std::path::PathBuf::from(dir)
+        } else {
+            let config_dir = std::env::var("XDG_CONFIG_HOME")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| {
+                    let home = std::env::var("HOME").expect("HOME environment variable not set");
+                    std::path::PathBuf::from(home).join(".config")
+                });
+            config_dir.join("nestvim").join("plugins")
+        };
         if !plugins_dir.exists() {
             return Ok(());
         }
 
-        let entries = std::fs::read_dir(plugins_dir)
-            .map_err(|e| format!("Failed to read plugins dir: {}", e))?;
+        let entries = std::fs::read_dir(&plugins_dir)
+            .map_err(NestvimError::Io)?;
 
         for entry in entries {
-            let entry = entry.map_err(|e| format!("Dir entry error: {}", e))?;
+            let entry = entry.map_err(NestvimError::Io)?;
             let path = entry.path();
                 let ext = path.extension();
                 if ext == Some(std::ffi::OsStr::new("lua")) {

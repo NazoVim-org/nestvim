@@ -17,6 +17,8 @@ pub struct Editor {
     plugin_manager: PluginManager,
     state: EditorState,
     running: bool,
+    last_highlight_mod_count: usize,
+    needs_render: bool,
 }
 
 impl Editor {
@@ -65,15 +67,13 @@ impl Editor {
             plugin_manager,
             state,
             running: false,
+            last_highlight_mod_count: 0,
+            needs_render: true,
         })
     }
     
     pub async fn run(&mut self) -> io::Result<()> {
         self.running = true;
-        
-        // Initial render
-        let _ = self.highlighter.update(&self.buffer.to_string(), self.state.file_path.as_deref());
-        self.renderer.render(&self.terminal, &self.buffer, &self.state);
         
         // Event loop
         let mut reader = EventStream::new();
@@ -92,6 +92,7 @@ impl Editor {
                         }
                         Ok(Event::Resize(_, _)) => {
                             self.terminal.update_size();
+                            self.needs_render = true;
                         }
                         _ => {}
                     }
@@ -101,8 +102,17 @@ impl Editor {
                 }
             }
             
-            let _ = self.highlighter.update(&self.buffer.to_string(), self.state.file_path.as_deref());
-            self.renderer.render(&self.terminal, &self.buffer, &self.state);
+            // Update highlighter only when buffer content changed
+            if self.buffer.modification_count() > self.last_highlight_mod_count {
+                let _ = self.highlighter.update(&self.buffer.to_string(), self.state.file_path.as_deref());
+                self.last_highlight_mod_count = self.buffer.modification_count();
+            }
+            
+            // Render only when needed
+            if self.needs_render {
+                self.renderer.render(&self.terminal, &self.buffer, &self.state);
+                self.needs_render = false;
+            }
         }
         
         Ok(())
@@ -122,31 +132,37 @@ impl Editor {
         match key {
             KeyCode::Char('h') => {
                 self.state.cursor.col = self.state.cursor.col.saturating_sub(1);
+                self.needs_render = true;
             }
             KeyCode::Char('l') => {
                 let line_len = self.buffer.get_line(self.state.cursor.line).len();
                 self.state.cursor.col = (self.state.cursor.col + 1).min(line_len.saturating_sub(1));
+                self.needs_render = true;
             }
             KeyCode::Char('j') => {
                 self.state.cursor.line = (self.state.cursor.line + 1).min(line_count);
                 let len = self.buffer.get_line(self.state.cursor.line).len();
                 self.state.cursor.col = self.state.cursor.col.min(len.saturating_sub(1));
+                self.needs_render = true;
             }
             KeyCode::Char('k') => {
                 self.state.cursor.line = self.state.cursor.line.saturating_sub(1).max(1);
                 let len = self.buffer.get_line(self.state.cursor.line).len();
                 self.state.cursor.col = self.state.cursor.col.min(len.saturating_sub(1));
+                self.needs_render = true;
             }
             KeyCode::Char('i') => {
                 let prev_mode = self.state.mode;
                 self.state.mode = Mode::Insert;
                 self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Insert });
+                self.needs_render = true;
             }
             KeyCode::Char(':') => {
                 let prev_mode = self.state.mode;
                 self.state.mode = Mode::Command;
                 self.state.command_buffer.clear();
                 self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Command });
+                self.needs_render = true;
             }
             _ => {}
         }
@@ -159,6 +175,7 @@ impl Editor {
                 self.state.mode = Mode::Normal;
                 self.state.cursor.col = self.state.cursor.col.saturating_sub(1);
                 self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Normal });
+                self.needs_render = true;
             }
             KeyCode::Backspace => {
                 if self.state.cursor.col > 0 {
@@ -189,6 +206,7 @@ impl Editor {
     
     fn on_buffer_modified(&mut self) {
         self.plugin_manager.emit(PluginEvent::BufferChange);
+        self.needs_render = true;
     }
     
     async fn handle_command(&mut self, key: KeyCode) {
@@ -199,6 +217,7 @@ impl Editor {
                 let prev_mode = self.state.mode;
                 self.state.mode = Mode::Normal;
                 self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Normal });
+                self.needs_render = true;
                 
                 match cmd.as_str() {
                     "q" => {
@@ -231,6 +250,7 @@ impl Editor {
                 let prev_mode = self.state.mode;
                 self.state.mode = Mode::Normal;
                 self.plugin_manager.emit(PluginEvent::ModeChange { from: prev_mode, to: Mode::Normal });
+                self.needs_render = true;
             }
             KeyCode::Backspace => {
                 self.state.command_buffer.pop();

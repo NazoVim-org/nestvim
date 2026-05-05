@@ -1,12 +1,12 @@
 use ropey::Rope;
-use std::fs;
-use std::io;
 use std::path::PathBuf;
+use crate::types::NestvimError;
 
 pub struct TextBuffer {
     doc: Rope,
     pub file_path: Option<PathBuf>,
     pub dirty: bool,
+    modification_count: usize,
 }
 
 impl TextBuffer {
@@ -15,6 +15,7 @@ impl TextBuffer {
             doc: Rope::new(),
             file_path: None,
             dirty: false,
+            modification_count: 0,
         }
     }
 
@@ -23,6 +24,7 @@ impl TextBuffer {
             doc: Rope::from_str(text),
             file_path: None,
             dirty: false,
+            modification_count: 0,
         }
     }
 
@@ -48,6 +50,7 @@ impl TextBuffer {
         
         self.doc.insert(char_idx, text);
         self.dirty = true;
+        self.modification_count += 1;
     }
 
     pub fn delete(&mut self, line: usize, col: usize) {
@@ -65,6 +68,7 @@ impl TextBuffer {
         
         self.doc.remove(char_idx..char_idx + 1);
         self.dirty = true;
+        self.modification_count += 1;
     }
 
     pub fn insert_char(&mut self, line: usize, col: usize, ch: char) {
@@ -72,54 +76,107 @@ impl TextBuffer {
     }
 
     pub fn merge_with_prev_line(&mut self, line: usize) -> usize {
-        if line <= 1 {
+        if line <= 1 || line > self.line_count() {
             return 0;
         }
         
-        let prev_line_idx = line - 2;
-        let cur_line_idx = line - 1;
+        let prev_line_idx = line - 2; // 0-indexed previous line
+        let cur_line_idx = line - 1; // 0-indexed current line
         
         if prev_line_idx >= self.doc.len_lines() || cur_line_idx >= self.doc.len_lines() {
             return 0;
         }
         
-        let prev_line_end = self.doc.line_to_char(prev_line_idx) + self.doc.line(prev_line_idx).len_chars();
-        let cur_line_start = self.doc.line_to_char(cur_line_idx);
+        // Find the newline at the end of the previous line
+        let prev_line_start = self.doc.line_to_char(prev_line_idx);
+        let prev_line_len = self.doc.line(prev_line_idx).len_chars();
+        let newline_pos = prev_line_start + prev_line_len - 1;
         
-        // Remove the newline between lines
-        if cur_line_start > 0 {
-            self.doc.remove(cur_line_start - 1..cur_line_start);
-            self.dirty = true;
+        if newline_pos >= self.doc.len_chars() {
+            return 0;
         }
         
-        prev_line_end.saturating_sub(1)
+        // Remove the newline between lines
+        self.doc.remove(newline_pos..newline_pos + 1);
+        self.dirty = true;
+        self.modification_count += 1;
+        
+        // Return the new cursor column (end of merged line)
+        prev_line_len - 1
     }
 
-    pub async fn load_file(path: &str) -> io::Result<Self> {
-        let content = fs::read_to_string(path)?;
+    pub async fn load_file(path: &str) -> Result<Self, NestvimError> {
+        let content = tokio::fs::read_to_string(path).await?;
         let mut buffer = Self::with_text(&content);
         buffer.file_path = Some(PathBuf::from(path));
         Ok(buffer)
     }
 
-    pub async fn save_file(&mut self) -> io::Result<()> {
+    pub async fn save_file(&mut self) -> Result<(), NestvimError> {
         if let Some(path) = &self.file_path {
             let content = self.doc.to_string();
-            fs::write(path, content)?;
+            tokio::fs::write(path, content).await?;
             self.dirty = false;
             Ok(())
         } else {
-            Err(io::Error::new(io::ErrorKind::NotFound, "No file path set"))
+            Err(NestvimError::NoFilePath)
         }
     }
 
     pub fn to_string(&self) -> String {
         self.doc.to_string()
     }
+
+    pub fn modification_count(&self) -> usize {
+        self.modification_count
+    }
 }
 
 impl Default for TextBuffer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_insert_char() {
+        let mut buf = TextBuffer::new();
+        buf.insert_char(1,0, 'a');
+        assert_eq!(buf.get_line(1), "a");
+        assert!(buf.dirty);
+        assert_eq!(buf.modification_count(), 1);
+    }
+
+    #[test]
+    fn test_delete_char() {
+        let mut buf = TextBuffer::with_text("ab\n");
+        buf.delete(1, 0);
+        assert_eq!(buf.get_line(1), "b\n");
+        assert!(buf.dirty);
+    }
+
+    #[test]
+    fn test_merge_with_prev_line() {
+        let mut buf = TextBuffer::with_text("hello\nworld\n");
+        let col = buf.merge_with_prev_line(2);
+        // Check content is merged correctly
+        assert_eq!(buf.to_string(), "helloworld\n");
+        assert!(buf.dirty);
+    }
+
+    #[test]
+    fn test_save_resets_dirty() {
+        let mut buf = TextBuffer::with_text("test\n");
+        buf.file_path = Some(std::path::PathBuf::from("/tmp/test_nestvim.txt"));
+        // Use tokio runtime to run async save
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            buf.save_file().await.expect("Save failed");
+        });
+        assert!(!buf.dirty);
     }
 }

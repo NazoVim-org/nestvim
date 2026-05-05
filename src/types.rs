@@ -18,6 +18,13 @@ pub enum Mode {
     Normal,
     Insert,
     Command,
+    Visual,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VisualType {
+    Character,
+    Line,
 }
 
 impl std::fmt::Display for Mode {
@@ -26,6 +33,7 @@ impl std::fmt::Display for Mode {
             Mode::Normal => write!(f, "NORMAL"),
             Mode::Insert => write!(f, "INSERT"),
             Mode::Command => write!(f, "COMMAND"),
+            Mode::Visual => write!(f, "VISUAL"),
         }
     }
 }
@@ -43,6 +51,8 @@ pub struct EditorState {
     pub file_path: Option<PathBuf>,
     pub dirty: bool,
     pub command_buffer: String,
+    pub visual_start: Option<Position>,
+    pub visual_type: Option<VisualType>,
 }
 
 impl Default for EditorState {
@@ -53,6 +63,8 @@ impl Default for EditorState {
             file_path: None,
             dirty: false,
             command_buffer: String::new(),
+            visual_start: None,
+            visual_type: None,
         }
     }
 }

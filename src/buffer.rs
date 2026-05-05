@@ -130,6 +130,144 @@ impl TextBuffer {
     pub fn modification_count(&self) -> usize {
         self.modification_count
     }
+
+    pub fn line_to_char(&self, line_idx: usize) -> usize {
+        self.doc.line_to_char(line_idx)
+    }
+
+    pub fn len_chars(&self) -> usize {
+        self.doc.len_chars()
+    }
+
+    pub fn remove_range(&mut self, start: usize, end: usize) {
+        if start < end {
+            self.doc.remove(start..end);
+            self.dirty = true;
+            self.modification_count += 1;
+        }
+    }
+
+    pub fn get_line_range(&self, start_line: usize, end_line: usize) -> String {
+        if start_line > end_line || start_line < 1 {
+            return String::new();
+        }
+        let start = start_line.saturating_sub(1);
+        let end = end_line.min(self.doc.len_lines());
+        if start >= end {
+            return String::new();
+        }
+        let mut result = String::new();
+        for i in start..end {
+            result.push_str(&self.doc.line(i).to_string());
+            if i < end - 1 {
+                result.push('\n');
+            }
+        }
+        result
+    }
+
+    pub fn get_word_at(&self, line: usize, col: usize) -> (String, usize, usize) {
+        let line_idx = line.saturating_sub(1);
+        if line_idx >= self.doc.len_lines() {
+            return (String::new(), 0, 0);
+        }
+        let line_str = self.doc.line(line_idx).to_string();
+        let chars: Vec<char> = line_str.chars().collect();
+
+        if col >= chars.len() {
+            return (String::new(), col, col);
+        }
+
+        let mut start = col;
+        while start > 0 && !chars[start - 1].is_whitespace() {
+            start -= 1;
+        }
+
+        let mut end = col;
+        while end < chars.len() && !chars[end].is_whitespace() {
+            end += 1;
+        }
+
+        let word: String = chars[start..end].iter().collect();
+        (word, start, end)
+    }
+
+    pub fn get_word_at_cursor(&self, line: usize, col: usize) -> String {
+        let (word, _, _) = self.get_word_at(line, col);
+        word
+    }
+
+    pub fn get_word_range(&self, line: usize, col: usize) -> (String, usize, usize) {
+        self.get_word_at(line, col)
+    }
+
+    pub fn get_char_range(&self, start_line: usize, start_col: usize, end_line: usize, end_col: usize) -> String {
+        if start_line > end_line {
+            return String::new();
+        }
+        if start_line == end_line {
+            if start_col >= end_col {
+                return String::new();
+            }
+            let line_str = self.get_line(start_line);
+            return line_str.chars().skip(start_col).take(end_col - start_col).collect();
+        }
+
+        let mut result = String::new();
+        result.push_str(&self.get_line(start_line).chars().skip(start_col).collect::<String>());
+        result.push('\n');
+        for line_num in (start_line + 1)..end_line {
+            result.push_str(&self.get_line(line_num));
+            result.push('\n');
+        }
+        result.push_str(&self.get_line(end_col).chars().take(end_col).collect::<String>());
+        result
+    }
+
+    pub fn delete_line(&mut self, line: usize) -> String {
+        if line < 1 || line > self.line_count() {
+            return String::new();
+        }
+        let line_idx = line.saturating_sub(1);
+        let content = self.doc.line(line_idx).to_string();
+
+        let char_start = self.doc.line_to_char(line_idx);
+        let char_end = if line_idx + 1 < self.doc.len_lines() {
+            self.doc.line_to_char(line_idx + 1)
+        } else {
+            self.doc.len_chars()
+        };
+
+        if char_end > char_start {
+            self.doc.remove(char_start..char_end);
+            self.dirty = true;
+            self.modification_count += 1;
+        }
+
+        content
+    }
+
+    pub fn delete_range(&mut self, start_line: usize, start_col: usize, end_line: usize, end_col: usize) -> String {
+        if start_line > end_line {
+            return String::new();
+        }
+
+        let content = self.get_char_range(start_line, start_col, end_line, end_col);
+
+        let start_line_idx = start_line.saturating_sub(1);
+        let end_line_idx = end_line.saturating_sub(1);
+
+        let char_start = self.doc.line_to_char(start_line_idx) + start_col.min(self.doc.line(start_line_idx).len_chars());
+        let char_end = self.doc.line_to_char(end_line_idx) + end_col.min(self.doc.line(end_line_idx).len_chars());
+
+        if char_start < char_end {
+            self.doc.remove(char_start..char_end);
+            self.dirty = true;
+            self.modification_count += 1;
+        }
+
+        content
+    }
 }
 
 impl Default for TextBuffer {

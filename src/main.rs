@@ -2,6 +2,7 @@ mod buffer;
 mod editor;
 mod highlight;
 mod plugin;
+mod register;
 mod renderer;
 mod terminal;
 mod types;

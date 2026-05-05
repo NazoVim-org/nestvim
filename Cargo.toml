@@ -20,6 +20,7 @@ futures = "0.3"
 libloading = "0.8"
 atty = "0.2"
 clap = { version = "4", features = ["derive"] }
+arboard = "3"
 
 [profile.release]
 lto = true

@@ -10,6 +10,7 @@ pub struct NixPlugin {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct NixConfig {
     pub name: String,
     pub version: Option<String>,
@@ -48,7 +49,7 @@ impl NixConfig {
         })
     }
 
-    pub fn from_github(user_repo: &str) -> Result<Self, String> {
+    pub fn _from_github(user_repo: &str) -> Result<Self, String> {
         let parts: Vec<&str> = user_repo.split('/').collect();
         if parts.len() != 2 {
             return Err("Invalid format. Expected user/repo".to_string());

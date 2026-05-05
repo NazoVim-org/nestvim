@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 const PLUGIN_VERSION: u32 = super::API_VERSION;
 
+#[allow(improper_ctypes_definitions)]
 type CreatePluginFn = unsafe extern "C" fn() -> *mut dyn Plugin;
 type GetApiVersionFn = unsafe extern "C" fn() -> u32;
 

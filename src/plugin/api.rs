@@ -23,11 +23,11 @@ impl PluginApi {
         }
     }
 
-    pub fn add_command(&self, name: String, f: CommandFn) {
+    pub fn _add_command(&self, name: String, f: CommandFn) {
         self.commands.borrow_mut().insert(name, f);
     }
 
-    pub fn on(&self, event: String, f: EventFn) {
+    pub fn _on(&self, event: String, f: EventFn) {
         self.event_handlers.borrow_mut().entry(event).or_insert_with(Vec::new).push(f);
     }
 
@@ -35,7 +35,7 @@ impl PluginApi {
         (self.log_fn)(msg);
     }
 
-    pub fn log_fn(&self) -> Rc<LogFn> {
+    pub fn _log_fn(&self) -> Rc<LogFn> {
         self.log_fn.clone()
     }
 

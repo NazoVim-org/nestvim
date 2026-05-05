@@ -34,6 +34,7 @@ impl std::fmt::Display for LoaderError {
 impl std::error::Error for LoaderError {}
 
 pub trait Loader: Send + Sync {
+    #[allow(dead_code)]
     fn name(&self) -> &str;
 
     fn supported_extensions(&self) -> &[&str];

@@ -33,7 +33,7 @@ impl super::Loader for LispLoader {
     }
 
     fn load(&self, path: &Path, _api: Rc<PluginApi>) -> Result<Box<dyn Plugin>, super::LoaderError> {
-        let code = std::fs::read_to_string(path)
+        let _code = std::fs::read_to_string(path)
             .map_err(|e| super::LoaderError::Io(format!("Failed to read {}: {}", path.display(), e)))?;
 
         let name = path

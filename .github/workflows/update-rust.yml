@@ -14,16 +14,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get current Rust version from flake.nix
+      - name: Get current Rust version from rust-toolchain.toml
         id: current-version
         run: |
-          VERSION=$(grep -oP 'rustVersion = "\K[0-9.]+' flake.nix)
+          VERSION=$(grep -oP 'channel = "\K[0-9.]+' rust-toolchain.toml)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Get latest Rust stable version
         id: latest-version
         run: |
-          VERSION=$(curl -s https://static.rust-lang.org/dist/rust-stable.toml | grep -m1 '^version = ' | cut -d'"' -f2)
+          VERSION=$(curl -sL https://raw.githubusercontent.com/rust-lang/rustup/master/rustup-init.sh | sh -s -- -v | grep -oP '\d+\.\d+\.\d+' | head -1)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Compare versions
@@ -33,21 +33,25 @@ jobs:
           LATEST="${{ steps.latest-version.outputs.version }}"
           echo "current=$CURRENT" >> $GITHUB_OUTPUT
           echo "latest=$LATEST" >> $GITHUB_OUTPUT
-          if [ "$CURRENT" != "$LATEST" ]; then
+
+          CURRENT_MAJOR_MINOR=$(echo $CURRENT | cut -d. -f1,2)
+          LATEST_MAJOR_MINOR=$(echo $LATEST | cut -d. -f1,2)
+
+          if [ "$CURRENT_MAJOR_MINOR" != "$LATEST_MAJOR_MINOR" ]; then
             echo "needs_update=true" >> $GITHUB_OUTPUT
           else
             echo "needs_update=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Update flake.nix
-        if: needs_update == 'true'
-        run: |
-          sed -i "s/rustVersion = \"${{ steps.current-version.outputs.version }}\"/rustVersion = \"${{ steps.latest-version.outputs.version }}\"/" flake.nix
-
       - name: Update rust-toolchain.toml
         if: needs_update == 'true'
         run: |
           sed -i "s/channel = \"${{ steps.current-version.outputs.version }}\"/channel = \"${{ steps.latest-version.outputs.version }}\"/" rust-toolchain.toml
+
+      - name: Update flake.nix
+        if: needs_update == 'true'
+        run: |
+          sed -i "s/rustVersion = \"${{ steps.current-version.outputs.version }}\"/rustVersion = \"${{ steps.latest-version.outputs.version }}\"/" flake.nix
 
       - name: Create Pull Request
         if: needs_update == 'true'
@@ -63,7 +67,7 @@ jobs:
             - Latest: ${{ steps.latest-version.outputs.version }}
 
             Updated files:
-            - flake.nix
             - rust-toolchain.toml
+            - flake.nix
           branch: update-rust-version
           delete-branch: true

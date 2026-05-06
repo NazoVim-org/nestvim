@@ -1,5 +1,6 @@
 use crate::buffer::TextBuffer;
 use crate::types::Position;
+use std::collections::VecDeque;
 
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
@@ -47,17 +48,16 @@ pub struct Edit {
 }
 
 pub struct UndoManager {
-    undo_stack: Vec<Edit>,
-    redo_stack: Vec<Edit>,
-    #[allow(dead_code)]
+    undo_stack: VecDeque<Edit>,
+    redo_stack: VecDeque<Edit>,
     max_size: usize,
 }
 
 impl UndoManager {
     pub fn new() -> Self {
         Self {
-            undo_stack: Vec::new(),
-            redo_stack: Vec::new(),
+            undo_stack: VecDeque::new(),
+            redo_stack: VecDeque::new(),
             max_size: 1000,
         }
     }
@@ -65,23 +65,23 @@ impl UndoManager {
     #[allow(dead_code)]
     pub fn push(&mut self, edit: Edit) {
         if self.undo_stack.len() >= self.max_size {
-            self.undo_stack.remove(0);
+            self.undo_stack.pop_front();
         }
-        self.undo_stack.push(edit);
+        self.undo_stack.push_back(edit);
         self.redo_stack.clear();
     }
 
     pub fn undo(&mut self, buffer: &mut TextBuffer) -> Option<Edit> {
-        let edit = self.undo_stack.pop()?;
-        self.redo_stack.push(edit.clone());
+        let edit = self.undo_stack.pop_back()?;
+        self.redo_stack.push_back(edit.clone());
         self.apply_undo(buffer, &edit);
         Some(edit)
     }
 
     #[allow(dead_code)]
     pub fn redo(&mut self, buffer: &mut TextBuffer) -> Option<Edit> {
-        let edit = self.redo_stack.pop()?;
-        self.undo_stack.push(edit.clone());
+        let edit = self.redo_stack.pop_back()?;
+        self.undo_stack.push_back(edit.clone());
         self.apply_redo(buffer, &edit);
         Some(edit)
     }
@@ -140,9 +140,9 @@ impl UndoManager {
                 buffer.insert(*line, *col, text);
             }
             EditType::Delete { line, col, text } => {
-                for _ in 0..text.len() {
-                    buffer.delete(*line, *col);
-                }
+                let start = buffer.line_to_char(line - 1) + col;
+                let end = start + text.len();
+                buffer.remove_range(start, end);
             }
             EditType::InsertLine { line, text } => {
                 buffer.insert(*line, 0, text);

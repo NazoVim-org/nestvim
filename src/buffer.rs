@@ -52,7 +52,8 @@ impl TextBuffer {
             self.dirty = true;
             self.modification_count += 1;
             if text != "\n" {
-                self.doc.insert(self.doc.len_chars(), text);
+                let insert_pos = self.doc.len_chars();
+                self.doc.insert(insert_pos, text);
                 self.modification_count += 1;
             }
             return;
@@ -377,6 +378,14 @@ mod tests {
         assert_eq!(buf.get_line(1), "a");
         assert!(buf.dirty);
         assert_eq!(buf.modification_count(), 1);
+    }
+
+    #[test]
+    fn test_insert_at_end_of_buffer() {
+        let mut buf = TextBuffer::new();
+        buf.insert(1, 0, "hello");
+        assert_eq!(buf.get_line(1), "hello");
+        assert!(buf.dirty);
     }
 
     #[test]

@@ -582,7 +582,7 @@ impl Editor {
                     }
                     self.pending_mark = None;
                 }
-                if let Some(_r) = self.pending_register {
+                if let Some(_pending_reg) = self.pending_register {
                     if let KeyCode::Char(c) = key {
                         if c.is_ascii_lowercase() {
                             self.pending_register = Some(c);

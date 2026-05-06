@@ -131,7 +131,10 @@ impl Renderer {
                         } else {
                             0
                         };
-                        format!("{:width$}{raw_line}", line_num, width = line_number_width)
+                        let num_str = format!("{:width$} ", line_num, width = line_number_width);
+                        let gray = "\x1b[38;5;240m";
+                        let reset = "\x1b[0m";
+                        format!("{}{}{}{}", gray, num_str, reset, raw_line)
                     } else {
                         raw_line
                     }

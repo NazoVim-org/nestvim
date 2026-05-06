@@ -148,12 +148,10 @@ impl Editor {
             tokio::select! {
                 Some(event) = reader.next() => {
                     match event {
-                        Ok(Event::Key(key)) => {
-                            if key.kind == KeyEventKind::Press {
-                                self.last_keypress_time = Instant::now();
-                                let modifiers = key.modifiers;
-                                self.handle_key(key.code, modifiers).await;
-                            }
+                        Ok(Event::Key(key)) if key.kind == KeyEventKind::Press => {
+                            self.last_keypress_time = Instant::now();
+                            let modifiers = key.modifiers;
+                            self.handle_key(key.code, modifiers).await;
                         }
                         Ok(Event::Resize(_, _)) => {
                             self.terminal.update_size();
@@ -340,7 +338,7 @@ impl Editor {
             KeyCode::Char('v') => {
                 let prev_mode = self.state.mode;
                 self.state.mode = Mode::Visual;
-                self.state.visual_start = Some(self.state.cursor.clone());
+                self.state.visual_start = Some(self.state.cursor);
                 self.state.visual_type = Some(VisualType::Character);
                 self.plugin_manager.emit(PluginEvent::ModeChange {
                     from: prev_mode,
@@ -351,7 +349,7 @@ impl Editor {
             KeyCode::Char('V') => {
                 let prev_mode = self.state.mode;
                 self.state.mode = Mode::Visual;
-                self.state.visual_start = Some(self.state.cursor.clone());
+                self.state.visual_start = Some(self.state.cursor);
                 self.state.visual_type = Some(VisualType::Line);
                 self.plugin_manager.emit(PluginEvent::ModeChange {
                     from: prev_mode,
@@ -385,7 +383,7 @@ impl Editor {
             }
             KeyCode::Char('q') => {
                 if let KeyCode::Char(c) = key {
-                    if c >= 'a' && c <= 'z' {
+                    if ('a'..='z').contains(&c) {
                         self.toggle_macro_recording(c);
                         self.needs_render = true;
                         return;
@@ -495,7 +493,7 @@ impl Editor {
 
                 if let Some(_pending) = self.pending_macro_play {
                     if let KeyCode::Char(c) = key {
-                        if c >= 'a' && c <= 'z' {
+                        if ('a'..='z').contains(&c) {
                             self.play_macro(c);
                             self.pending_macro_play = None;
                             self.needs_render = true;
@@ -534,7 +532,7 @@ impl Editor {
                 }
                 if let Some(pending) = self.pending_mark {
                     if let KeyCode::Char(c) = key {
-                        if (pending == 'm' && c >= 'a' && c <= 'z')
+                        if (pending == 'm' && ('a'..='z').contains(&c))
                             || (pending == '`' || pending == '\'')
                         {
                             self.handle_mark(pending, c);
@@ -547,7 +545,7 @@ impl Editor {
                 }
                 if let Some(_r) = self.pending_register {
                     if let KeyCode::Char(c) = key {
-                        if c >= 'a' && c <= 'z' {
+                        if ('a'..='z').contains(&c) {
                             self.pending_register = Some(c);
                             return;
                         }
@@ -559,7 +557,7 @@ impl Editor {
 
         if let Some(r) = self.pending_register {
             if let KeyCode::Char(c) = key {
-                if c >= 'a' && c <= 'z' {
+                if ('a'..='z').contains(&c) {
                     self.pending_register = None;
                     if let Some(op) = self.pending_operator {
                         self.pending_operator = None;
@@ -667,17 +665,11 @@ impl Editor {
                 }
                 _ => {}
             },
-            '>' => match key {
-                KeyCode::Char('>') => {
-                    self.indent_lines(register, true);
-                }
-                _ => {}
+            '>' => if let KeyCode::Char('>') = key {
+                self.indent_lines(register, true);
             },
-            '<' => match key {
-                KeyCode::Char('<') => {
-                    self.indent_lines(register, false);
-                }
-                _ => {}
+            '<' => if let KeyCode::Char('<') = key {
+                self.indent_lines(register, false);
             },
             _ => {}
         }
@@ -733,6 +725,7 @@ impl Editor {
         self.needs_render = true;
     }
 
+    #[allow(clippy::single_match)]
     async fn handle_text_object(&mut self, key: KeyCode, register: char, inner: bool) {
         match key {
             KeyCode::Char('w') => {
@@ -867,11 +860,7 @@ impl Editor {
                         );
                     }
                 } else {
-                    let insert_line = if before {
-                        self.state.cursor.line + i
-                    } else {
-                        self.state.cursor.line + i
-                    };
+                    let insert_line = self.state.cursor.line + i;
                     self.buffer.insert(insert_line, 0, line);
                     self.buffer.insert(insert_line, line.len(), "\n");
                 }
@@ -1726,7 +1715,7 @@ impl Editor {
 
     fn scroll_cursor_to_center(&mut self) {
         let terminal_rows = self.terminal.rows() as usize;
-        let visible_rows = (terminal_rows as usize).saturating_sub(2);
+        let visible_rows = terminal_rows.saturating_sub(2);
         let scroll_pos = self.state.cursor.line.saturating_sub(visible_rows / 2);
         self.state.cursor.line = scroll_pos.max(1);
     }
@@ -1737,7 +1726,7 @@ impl Editor {
 
     fn scroll_cursor_to_bottom(&mut self) {
         let terminal_rows = self.terminal.rows() as usize;
-        let visible_rows = (terminal_rows as usize).saturating_sub(2);
+        let visible_rows = terminal_rows.saturating_sub(2);
         let line_count = self.buffer.line_count();
         self.state.cursor.line = (line_count.saturating_sub(visible_rows) + 1).max(1);
     }

@@ -77,7 +77,7 @@ impl Macros {
 
     pub fn start_recording(&mut self, name: char) {
         self.recording = Some(name);
-        self.macros.entry(name).or_insert_with(Vec::new);
+        self.macros.entry(name).or_default();
     }
 
     pub fn stop_recording(&mut self) -> Option<char> {

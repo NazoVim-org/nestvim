@@ -49,7 +49,8 @@ impl super::Loader for LuaLoader {
         let lua = Lua::new();
 
         let api_outer = api.clone();
-        let _ = lua.globals().set(
+        #[allow(unused_must_use)]
+        lua.globals().set(
             "nestvim",
             lua.create_table()
                 .map_err(|e| super::LoaderError::Parse(format!("Lua error: {}", e)))?,

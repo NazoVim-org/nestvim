@@ -31,7 +31,7 @@ impl PluginApi {
         self.event_handlers
             .borrow_mut()
             .entry(event)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(f);
     }
 

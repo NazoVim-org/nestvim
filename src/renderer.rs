@@ -131,11 +131,7 @@ impl Renderer {
                         } else {
                             0
                         };
-                        format!(
-                            "{}{}",
-                            format!("{:width$}", line_num, width = line_number_width),
-                            raw_line
-                        )
+                        format!("{:width$}{raw_line}", line_num, width = line_number_width)
                     } else {
                         raw_line
                     }

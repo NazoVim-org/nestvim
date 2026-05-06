@@ -1,4 +1,3 @@
-use atty;
 use crossterm::{
     cursor::{MoveTo, Show},
     execute,
@@ -40,7 +39,7 @@ impl Terminal {
 
     pub fn enable_raw_mode(&mut self) -> io::Result<()> {
         if !atty::is(atty::Stream::Stdin) {
-            return Err(io::Error::new(io::ErrorKind::Other, "Not a terminal"));
+            return Err(io::Error::other("Not a terminal"));
         }
         crossterm::terminal::enable_raw_mode()?;
         execute!(self.stdout, EnterAlternateScreen, Show)?;

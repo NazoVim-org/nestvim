@@ -36,6 +36,8 @@ pub struct Editor {
     current_search_idx: usize,
     dot_last_action: Option<DotAction>,
     replace_char: Option<char>,
+    last_fchar: Option<char>,
+    last_fchar_till: bool,
 }
 
 #[derive(Clone)]
@@ -126,6 +128,8 @@ impl Editor {
             current_search_idx: 0,
             dot_last_action: None,
             replace_char: None,
+            last_fchar: None,
+            last_fchar_till: false,
         })
     }
 
@@ -193,6 +197,11 @@ impl Editor {
                 mode: self.state.mode,
                 key: c,
             });
+
+            if self.state.macros.is_recording() {
+                let key_str = c.to_string();
+                self.state.macros.add_key(key_str);
+            }
         }
 
         if modifiers.contains(KeyModifiers::CONTROL) {
@@ -335,6 +344,36 @@ impl Editor {
                 });
                 self.needs_render = true;
             }
+            KeyCode::Char('f') => {
+                if self.state.command_buffer.is_empty() {
+                    self.pending_operator = Some('f');
+                }
+            }
+            KeyCode::Char('F') => {
+                if self.state.command_buffer.is_empty() {
+                    self.pending_operator = Some('F');
+                }
+            }
+            KeyCode::Char('t') => {
+                if self.state.command_buffer.is_empty() {
+                    self.pending_operator = Some('t');
+                }
+            }
+            KeyCode::Char('T') => {
+                if self.state.command_buffer.is_empty() {
+                    self.pending_operator = Some('T');
+                }
+            }
+            KeyCode::Char(';') => {
+                if self.repeat_find(true) {
+                    self.needs_render = true;
+                }
+            }
+            KeyCode::Char(',') => {
+                if self.repeat_find(false) {
+                    self.needs_render = true;
+                }
+            }
             KeyCode::Char('v') => {
                 let prev_mode = self.state.mode;
                 self.state.mode = Mode::Visual;
@@ -381,17 +420,17 @@ impl Editor {
             KeyCode::Char('\'') => {
                 self.pending_mark = Some('\'');
             }
-            KeyCode::Char('q') => {
-                if let KeyCode::Char(c) = key {
-                    if c.is_ascii_lowercase() {
-                        self.toggle_macro_recording(c);
-                        self.needs_render = true;
-                        return;
-                    }
-                }
-            }
             KeyCode::Char('@') => {
                 self.pending_macro_play = Some('@');
+            }
+            KeyCode::Char('q') => {
+                if self.state.command_buffer.is_empty() {
+                    if self.state.macros.is_recording() {
+                        self.state.macros.stop_recording();
+                    } else {
+                        self.pending_operator = Some('q');
+                    }
+                }
             }
             _ => {
                 match key {
@@ -674,6 +713,49 @@ impl Editor {
                     self.indent_lines(register, false);
                 }
             }
+            'f' => {
+                if let KeyCode::Char(ch) = key {
+                    self.last_fchar = Some(ch);
+                    self.last_fchar_till = false;
+                    if self.find_char(ch, false, true) {
+                        self.needs_render = true;
+                    }
+                }
+            }
+            'F' => {
+                if let KeyCode::Char(ch) = key {
+                    self.last_fchar = Some(ch);
+                    self.last_fchar_till = false;
+                    if self.find_char(ch, false, false) {
+                        self.needs_render = true;
+                    }
+                }
+            }
+            't' => {
+                if let KeyCode::Char(ch) = key {
+                    self.last_fchar = Some(ch);
+                    self.last_fchar_till = true;
+                    if self.find_char(ch, true, true) {
+                        self.needs_render = true;
+                    }
+                }
+            }
+            'T' => {
+                if let KeyCode::Char(ch) = key {
+                    self.last_fchar = Some(ch);
+                    self.last_fchar_till = true;
+                    if self.find_char(ch, true, false) {
+                        self.needs_render = true;
+                    }
+                }
+            }
+            'q' => {
+                if let KeyCode::Char(c) = key {
+                    if c.is_ascii_lowercase() {
+                        self.state.macros.start_recording(c);
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -751,20 +833,172 @@ impl Editor {
                         .buffer
                         .get_word_range(self.state.cursor.line, self.state.cursor.col);
                     if !word.is_empty() {
-                        let mut search_start = start;
-                        while search_start > 0 {
-                            search_start -= 1;
+                        let line = self.buffer.get_line(self.state.cursor.line);
+                        let mut aw_start = start;
+                        while aw_start > 0 {
+                            let prev_char = line.chars().nth(aw_start - 1);
+                            if prev_char == Some(' ') || prev_char == Some('\t') {
+                                aw_start -= 1;
+                            } else {
+                                break;
+                            }
                         }
-                        let mut search_end = end;
-                        while search_end < self.buffer.get_line(self.state.cursor.line).len() {
-                            search_end += 1;
+                        let mut aw_end = end;
+                        while aw_end < line.len() {
+                            let next_char = line.chars().nth(aw_end);
+                            if next_char == Some(' ') || next_char == Some('\t') {
+                                aw_end += 1;
+                            } else {
+                                break;
+                            }
                         }
+                        let char_start = self.buffer.line_to_char(self.state.cursor.line - 1) + aw_start;
+                        let char_end = char_start + (aw_end - aw_start);
+                        let content = self.buffer.get_char_range(
+                            self.state.cursor.line,
+                            aw_start,
+                            self.state.cursor.line,
+                            aw_end,
+                        );
+                        self.register.set(register, &content);
+                        self.buffer.remove_range(char_start, char_end);
                     }
                 }
+            }
+            KeyCode::Char('"') | KeyCode::Char('\'') => {
+                if let KeyCode::Char(quote) = key {
+                    self.handle_quote_text_object(register, quote, inner);
+                }
+            }
+            KeyCode::Char('(') | KeyCode::Char(')') | KeyCode::Char('b') => {
+                self.handle_bracket_text_object(register, '(', ')', inner);
+            }
+            KeyCode::Char('[') | KeyCode::Char(']') => {
+                self.handle_bracket_text_object(register, '[', ']', inner);
+            }
+            KeyCode::Char('{') | KeyCode::Char('}') | KeyCode::Char('B') => {
+                self.handle_bracket_text_object(register, '{', '}', inner);
+            }
+            KeyCode::Char('<') | KeyCode::Char('>') => {
+                self.handle_bracket_text_object(register, '<', '>', inner);
             }
             _ => {}
         }
         self.needs_render = true;
+    }
+
+    fn handle_quote_text_object(&mut self, register: char, quote: char, inner: bool) {
+        let line = self.buffer.get_line(self.state.cursor.line);
+        let col = self.state.cursor.col;
+
+        let mut open_pos: Option<usize> = None;
+        for i in (0..col).rev() {
+            if line.chars().nth(i) == Some(quote) {
+                open_pos = Some(i);
+                break;
+            }
+        }
+
+        let mut close_pos: Option<usize> = None;
+        for i in (col + 1)..line.len() {
+            if line.chars().nth(i) == Some(quote) {
+                close_pos = Some(i);
+                break;
+            }
+        }
+
+        if let Some(start) = open_pos {
+            if let Some(end) = close_pos {
+                let (content_start, content_end) = if inner {
+                    (start + 1, end)
+                } else {
+                    (start, end + 1)
+                };
+
+                let content: String = line.chars().skip(content_start).take(content_end - content_start).collect();
+                let char_start = self.buffer.line_to_char(self.state.cursor.line - 1) + content_start;
+                let char_end = char_start + content.len();
+
+                self.register.set(register, &content);
+                self.buffer.remove_range(char_start, char_end);
+            }
+        }
+    }
+
+    fn handle_bracket_text_object(&mut self, register: char, open: char, close: char, inner: bool) {
+        let col = self.state.cursor.col;
+
+        let mut open_pos: Option<usize> = None;
+        let mut open_line = self.state.cursor.line;
+        for l in (1..=self.state.cursor.line).rev() {
+            let l_str = self.buffer.get_line(l);
+            for i in (0..l_str.len()).rev() {
+                if l == self.state.cursor.line && i >= col {
+                    continue;
+                }
+                if l_str.chars().nth(i) == Some(open) {
+                    open_pos = Some(i);
+                    open_line = l;
+                    break;
+                }
+            }
+            if open_pos.is_some() {
+                break;
+            }
+        }
+
+        let mut close_pos: Option<usize> = None;
+        let mut close_line = self.state.cursor.line;
+        for l in self.state.cursor.line..=self.buffer.line_count() {
+            let l_str = self.buffer.get_line(l);
+            for i in 0..l_str.len() {
+                if l == self.state.cursor.line && i <= col {
+                    continue;
+                }
+                if l_str.chars().nth(i) == Some(close) {
+                    close_pos = Some(i);
+                    close_line = l;
+                    break;
+                }
+            }
+            if close_pos.is_some() {
+                break;
+            }
+        }
+
+        if let Some(start) = open_pos {
+            if let Some(end) = close_pos {
+                let (content_start, content_end) = if inner {
+                    (start + 1, end)
+                } else {
+                    (start, end + 1)
+                };
+
+                let start_char_idx = self.buffer.line_to_char(open_line - 1) + content_start;
+                let end_char_idx = if close_line == open_line {
+                    start_char_idx + (content_end - content_start)
+                } else {
+                    self.buffer.line_to_char(close_line - 1) + content_end
+                };
+
+                let mut content = String::new();
+                if open_line == close_line {
+                    let line_str = self.buffer.get_line(open_line);
+                    content = line_str.chars().skip(content_start).take(content_end - content_start).collect();
+                } else {
+                    content.push_str(&self.buffer.get_line(open_line).chars().skip(content_start).take(usize::MAX).collect::<String>());
+                    content.push('\n');
+                    for l in (open_line + 1)..close_line {
+                        content.push_str(&self.buffer.get_line(l));
+                        content.push('\n');
+                    }
+                    content.push_str(&self.buffer.get_line(close_line).chars().take(content_end).collect::<String>());
+                }
+
+                self.register.set(register, &content);
+                self.buffer.remove_range(start_char_idx, end_char_idx);
+            }
+        }
     }
 
     async fn execute_operator_with_register(&mut self, op: char, register: char, _key: KeyCode) {
@@ -924,6 +1158,18 @@ impl Editor {
                 self.plugin_manager.emit(PluginEvent::ModeChange {
                     from: prev_mode,
                     to: Mode::Normal,
+                });
+                self.needs_render = true;
+            }
+            KeyCode::Char('c') => {
+                self.visual_delete();
+                let prev_mode = self.state.mode;
+                self.state.mode = Mode::Insert;
+                self.state.visual_start = None;
+                self.state.visual_type = None;
+                self.plugin_manager.emit(PluginEvent::ModeChange {
+                    from: prev_mode,
+                    to: Mode::Insert,
                 });
                 self.needs_render = true;
             }
@@ -1113,6 +1359,45 @@ impl Editor {
         }
     }
 
+    fn find_char(&mut self, ch: char, till: bool, forward: bool) -> bool {
+        let line = self.buffer.get_line(self.state.cursor.line);
+        let start_col = self.state.cursor.col;
+
+        if forward {
+            for i in (start_col + 1)..line.len() {
+                if line.chars().nth(i) == Some(ch) {
+                    if till {
+                        self.state.cursor.col = i.saturating_sub(1);
+                    } else {
+                        self.state.cursor.col = i;
+                    }
+                    return true;
+                }
+            }
+        } else {
+            for i in (0..start_col).rev() {
+                if line.chars().nth(i) == Some(ch) {
+                    if till {
+                        self.state.cursor.col = (i + 1).min(line.len().saturating_sub(1));
+                    } else {
+                        self.state.cursor.col = i;
+                    }
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn repeat_find(&mut self, forward: bool) -> bool {
+        if let Some(ch) = self.last_fchar {
+            let till = self.last_fchar_till;
+            self.find_char(ch, till, forward)
+        } else {
+            false
+        }
+    }
+
     fn do_search(&mut self, query: &str, direction: SearchDirection) {
         self.search_query = query.to_string();
         self.search_direction = direction;
@@ -1153,14 +1438,6 @@ impl Editor {
             self.state.marks.set(name, self.state.cursor);
         } else if let Some(pos) = self.state.marks.get(name) {
             self.state.cursor = pos;
-        }
-    }
-
-    fn toggle_macro_recording(&mut self, name: char) {
-        if self.state.macros.is_recording() {
-            self.state.macros.stop_recording();
-        } else {
-            self.state.macros.start_recording(name);
         }
     }
 

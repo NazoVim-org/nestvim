@@ -42,6 +42,19 @@ impl TextBuffer {
     pub fn insert(&mut self, line: usize, col: usize, text: &str) {
         let line_idx = line.saturating_sub(1);
         if line_idx >= self.doc.len_lines() {
+            if self.doc.len_chars() == 0 {
+                self.doc.insert(0, "\n");
+            } else if line_idx == self.doc.len_lines() {
+                self.doc.insert(self.doc.len_chars(), "\n");
+            } else {
+                return;
+            }
+            self.dirty = true;
+            self.modification_count += 1;
+            if text != "\n" {
+                self.doc.insert(self.doc.len_chars(), text);
+                self.modification_count += 1;
+            }
             return;
         }
 

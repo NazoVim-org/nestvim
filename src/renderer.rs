@@ -150,7 +150,7 @@ impl Renderer {
 
         let screen_row = (state.cursor.line.saturating_sub(self.scroll_top) + 1) as u16;
         let screen_col = if state.show_line_numbers {
-            (state.cursor.col + line_number_width + 1) as u16
+            (state.cursor.col + line_number_width + 2) as u16
         } else {
             (state.cursor.col + 1) as u16
         };

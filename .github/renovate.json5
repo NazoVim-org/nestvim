@@ -1,21 +1,59 @@
 {
-  extends: ["config:recommended"],
-  timezone: "Etc/UTC",
-  labels: ["dependencies"],
-  dependencyDashboard: true,
-  prConcurrentLimit: 5,
+  extends: [
+    "config:base",
+    ":semanticCommits",
+    ":disableRateLimiting"
+  ],
+
+  timezone: "Asia/Tokyo",
+
+  // Rust (Cargo) 対応
+  enabledManagers: ["cargo"],
+
+  // 自動マージ設定（安全なやつだけ）
   packageRules: [
     {
-      matchManagers: ["npm"],
-      rangeStrategy: "replace"
+      description: "patchは自動マージ",
+      matchManagers: ["cargo"],
+      matchUpdateTypes: ["patch"],
+      automerge: true
     },
     {
-      matchManagers: ["github-actions"],
-      groupName: "github-actions"
+      description: "minorはPRだけ",
+      matchManagers: ["cargo"],
+      matchUpdateTypes: ["minor"],
+      automerge: false
     },
     {
-      matchManagers: ["nix"],
-      enabled: true
+      description: "majorは慎重に",
+      matchManagers: ["cargo"],
+      matchUpdateTypes: ["major"],
+      automerge: false
     }
-  ]
+  ],
+
+  // lockfile更新
+  lockFileMaintenance: {
+    enabled: true,
+    schedule: ["before 6am on monday"]
+  },
+
+  // PR制御
+  prConcurrentLimit: 5,
+  prHourlyLimit: 2,
+
+  // ラベル
+  labels: ["dependencies", "rust"],
+
+  // CI壊さないため
+  rebaseWhen: "conflicted",
+
+  // Rust特有: Cargo.toml + Cargo.lock
+  rangeStrategy: "bump",
+
+  // vulnerability対応
+  vulnerabilityAlerts: {
+    enabled: true,
+    automerge: true
+  }
 }

@@ -341,7 +341,7 @@ mod tests {
     #[test]
     fn test_merge_with_prev_line() {
         let mut buf = TextBuffer::with_text("hello\nworld\n");
-        let col = buf.merge_with_prev_line(2);
+        buf.merge_with_prev_line(2);
         assert_eq!(buf.to_string(), "helloworld\n");
         assert!(buf.dirty);
     }

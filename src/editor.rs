@@ -1284,6 +1284,10 @@ impl Editor {
                     _ => {
                         if cmd.starts_with("set ") {
                             self.handle_set_command(&cmd);
+                        } else if cmd.starts_with("w ") || cmd.starts_with("w! ") {
+                            self.handle_write_path(&cmd).await;
+                        } else if cmd.starts_with("wq ") || cmd.starts_with("wq! ") {
+                            self.handle_write_quit_path(&cmd).await;
                         } else if !self.plugin_manager.execute_command(&cmd) {
                             eprintln!("[editor] Unknown command: {}", cmd);
                         }
@@ -1396,6 +1400,53 @@ impl Editor {
     async fn reload_file_discard(&mut self) {
         self.buffer.dirty = false;
         self.reload_file().await;
+    }
+
+    async fn handle_write_path(&mut self, cmd: &str) {
+        let path_str = cmd
+            .trim_start_matches("w!")
+            .trim_start_matches("w ")
+            .trim();
+        if path_str.is_empty() {
+            eprintln!("[editor] Expected filename after 'w'");
+            return;
+        }
+        let path = std::path::PathBuf::from(path_str);
+        match self.buffer.save_to_path(&path).await {
+            Ok(_) => {
+                self.state.file_path = Some(path);
+                self.plugin_manager.emit(PluginEvent::BufferSave {
+                    file_path: self.state.file_path.clone(),
+                });
+            }
+            Err(e) => {
+                eprintln!("[editor] Save failed: {}", e);
+            }
+        }
+    }
+
+    async fn handle_write_quit_path(&mut self, cmd: &str) {
+        let path_str = cmd
+            .trim_start_matches("wq!")
+            .trim_start_matches("wq ")
+            .trim();
+        if path_str.is_empty() {
+            eprintln!("[editor] Expected filename after 'wq'");
+            return;
+        }
+        let path = std::path::PathBuf::from(path_str);
+        match self.buffer.save_to_path(&path).await {
+            Ok(_) => {
+                self.state.file_path = Some(path);
+                self.plugin_manager.emit(PluginEvent::BufferSave {
+                    file_path: self.state.file_path.clone(),
+                });
+                self.running = false;
+            }
+            Err(e) => {
+                eprintln!("[editor] Save failed: {}", e);
+            }
+        }
     }
 
     fn handle_set_command(&mut self, cmd: &str) {

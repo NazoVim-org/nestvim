@@ -110,14 +110,19 @@ impl TextBuffer {
     }
 
     pub async fn save_file(&mut self) -> Result<(), NestvimError> {
-        if let Some(path) = &self.file_path {
-            let content = self.doc.to_string();
-            tokio::fs::write(path, content).await?;
-            self.dirty = false;
-            Ok(())
+        if let Some(path) = self.file_path.clone() {
+            self.save_to_path(&path).await
         } else {
             Err(NestvimError::NoFilePath)
         }
+    }
+
+    pub async fn save_to_path(&mut self, path: &std::path::Path) -> Result<(), NestvimError> {
+        let content = self.doc.to_string();
+        tokio::fs::write(path, content).await?;
+        self.file_path = Some(path.to_path_buf());
+        self.dirty = false;
+        Ok(())
     }
 
     #[allow(clippy::inherent_to_string)]

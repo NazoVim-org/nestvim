@@ -2,10 +2,10 @@ use atty;
 use crossterm::{
     cursor::{MoveTo, Show},
     execute,
-    terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, size},
+    terminal::{size, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::collections::HashMap;
-use std::io::{self, stdout, Stdout, Write, BufWriter};
+use std::io::{self, stdout, BufWriter, Stdout, Write};
 
 pub struct Terminal {
     rows: u16,
@@ -17,10 +17,23 @@ pub struct Terminal {
 impl Terminal {
     pub fn new() -> io::Result<Self> {
         match size() {
-            Ok((cols, rows)) => Ok(Self { rows, cols, stdout: BufWriter::new(stdout()), line_cache: HashMap::new() }),
+            Ok((cols, rows)) => Ok(Self {
+                rows,
+                cols,
+                stdout: BufWriter::new(stdout()),
+                line_cache: HashMap::new(),
+            }),
             Err(e) => {
-                eprintln!("Warning: Could not get terminal size: {}. Using defaults.", e);
-                Ok(Self { rows: 24, cols: 80, stdout: BufWriter::new(stdout()), line_cache: HashMap::new() })
+                eprintln!(
+                    "Warning: Could not get terminal size: {}. Using defaults.",
+                    e
+                );
+                Ok(Self {
+                    rows: 24,
+                    cols: 80,
+                    stdout: BufWriter::new(stdout()),
+                    line_cache: HashMap::new(),
+                })
             }
         }
     }
@@ -58,7 +71,10 @@ impl Terminal {
     }
 
     pub fn move_cursor(&mut self, row: u16, col: u16) -> io::Result<()> {
-        execute!(self.stdout, MoveTo(col.saturating_sub(1), row.saturating_sub(1)))
+        execute!(
+            self.stdout,
+            MoveTo(col.saturating_sub(1), row.saturating_sub(1))
+        )
     }
 
     pub fn clear_screen(&mut self) -> io::Result<()> {

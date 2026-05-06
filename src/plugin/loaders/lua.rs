@@ -36,8 +36,9 @@ impl super::Loader for LuaLoader {
     }
 
     fn load(&self, path: &Path, api: Rc<PluginApi>) -> Result<Box<dyn Plugin>, super::LoaderError> {
-        let code = std::fs::read_to_string(path)
-            .map_err(|e| super::LoaderError::Io(format!("Failed to read {}: {}", path.display(), e)))?;
+        let code = std::fs::read_to_string(path).map_err(|e| {
+            super::LoaderError::Io(format!("Failed to read {}: {}", path.display(), e))
+        })?;
 
         let name = path
             .file_stem()
@@ -54,15 +55,23 @@ impl super::Loader for LuaLoader {
                 .map_err(|e| super::LoaderError::Parse(format!("Lua error: {}", e)))?,
         );
 
-        let _ = lua.globals().get::<_, mlua::Table>("nestvim")
+        let _ = lua
+            .globals()
+            .get::<_, mlua::Table>("nestvim")
             .map_err(|e| super::LoaderError::Parse(format!("Lua error: {}", e)))?
-            .set("log", lua.create_function(move |_lua, msg: String| {
-                api_outer.log(&msg);
-                Ok(())
-            }).map_err(|e| super::LoaderError::Parse(format!("Lua error: {}", e)))?)
+            .set(
+                "log",
+                lua.create_function(move |_lua, msg: String| {
+                    api_outer.log(&msg);
+                    Ok(())
+                })
+                .map_err(|e| super::LoaderError::Parse(format!("Lua error: {}", e)))?,
+            )
             .map_err(|e| super::LoaderError::Parse(format!("Lua error: {}", e)))?;
 
-        let _ = lua.load(&code).eval::<mlua::Value>()
+        let _ = lua
+            .load(&code)
+            .eval::<mlua::Value>()
             .map_err(|e| super::LoaderError::Parse(format!("Lua eval error: {}", e)))?;
 
         Ok(Box::new(LuaPlugin { name, lua }))

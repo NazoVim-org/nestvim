@@ -27,17 +27,20 @@ impl NixConfig {
         for line in code.lines() {
             let line = line.trim();
             if line.starts_with("name") && line.contains("=") {
-                name = line.split('=').nth(1).map(|s| {
-                    s.trim().trim_matches('"').trim_matches('\'').to_string()
-                });
+                name = line
+                    .split('=')
+                    .nth(1)
+                    .map(|s| s.trim().trim_matches('"').trim_matches('\'').to_string());
             } else if line.starts_with("version") && line.contains("=") {
-                version = line.split('=').nth(1).map(|s| {
-                    s.trim().trim_matches('"').trim_matches('\'').to_string()
-                });
+                version = line
+                    .split('=')
+                    .nth(1)
+                    .map(|s| s.trim().trim_matches('"').trim_matches('\'').to_string());
             } else if line.starts_with("description") && line.contains("=") {
-                description = line.split('=').nth(1).map(|s| {
-                    s.trim().trim_matches('"').trim_matches('\'').to_string()
-                });
+                description = line
+                    .split('=')
+                    .nth(1)
+                    .map(|s| s.trim().trim_matches('"').trim_matches('\'').to_string());
             }
         }
 
@@ -91,7 +94,13 @@ impl NixPlugin {
             .map_err(|e| format!("Failed to create temp dir: {}", e))?;
 
         let output = Command::new("git")
-            .args(["clone", "--depth", "1", repo_url, temp_dir.to_str().unwrap()])
+            .args([
+                "clone",
+                "--depth",
+                "1",
+                repo_url,
+                temp_dir.to_str().unwrap(),
+            ])
             .output()
             .map_err(|e| format!("Failed to run git: {}", e))?;
 
@@ -117,8 +126,9 @@ impl super::Loader for NixLoader {
     }
 
     fn load(&self, path: &Path, api: Rc<PluginApi>) -> Result<Box<dyn Plugin>, super::LoaderError> {
-        let code = std::fs::read_to_string(path)
-            .map_err(|e| super::LoaderError::Io(format!("Failed to read {}: {}", path.display(), e)))?;
+        let code = std::fs::read_to_string(path).map_err(|e| {
+            super::LoaderError::Io(format!("Failed to read {}: {}", path.display(), e))
+        })?;
 
         let name = path
             .file_stem()
@@ -126,13 +136,12 @@ impl super::Loader for NixLoader {
             .unwrap_or("unnamed")
             .to_string();
 
-        let config = NixConfig::from_nix(&code)
-            .unwrap_or(NixConfig {
-                name: name.clone(),
-                version: None,
-                description: None,
-                repo_url: None,
-            });
+        let config = NixConfig::from_nix(&code).unwrap_or(NixConfig {
+            name: name.clone(),
+            version: None,
+            description: None,
+            repo_url: None,
+        });
 
         let mut plugin = Box::new(NixPlugin {
             name: name.clone(),

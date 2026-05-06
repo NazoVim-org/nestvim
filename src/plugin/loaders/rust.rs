@@ -50,9 +50,10 @@ impl super::Loader for RustLoader {
         };
 
         unsafe {
-            let version: Symbol<GetApiVersionFn> = library
-                .get(b"nestvim_plugin_api_version")
-                .map_err(|e| super::LoaderError::Io(format!("Failed to get version symbol: {}", e)))?;
+            let version: Symbol<GetApiVersionFn> =
+                library.get(b"nestvim_plugin_api_version").map_err(|e| {
+                    super::LoaderError::Io(format!("Failed to get version symbol: {}", e))
+                })?;
 
             let actual_version = version();
             if actual_version != PLUGIN_VERSION {
@@ -62,14 +63,17 @@ impl super::Loader for RustLoader {
                 });
             }
 
-            let create: Symbol<CreatePluginFn> = library
-                .get(b"nestvim_plugin_create")
-                .map_err(|e| super::LoaderError::Io(format!("Failed to get create symbol: {}", e)))?;
+            let create: Symbol<CreatePluginFn> =
+                library.get(b"nestvim_plugin_create").map_err(|e| {
+                    super::LoaderError::Io(format!("Failed to get create symbol: {}", e))
+                })?;
 
             let plugin_ptr = create();
 
             if plugin_ptr.is_null() {
-                return Err(super::LoaderError::Parse("Plugin creation returned null".to_string()));
+                return Err(super::LoaderError::Parse(
+                    "Plugin creation returned null".to_string(),
+                ));
             }
 
             let mut plugin = Box::from_raw(plugin_ptr);

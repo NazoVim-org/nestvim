@@ -1,6 +1,6 @@
+use arboard::Clipboard;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use arboard::Clipboard;
 
 pub struct Register {
     registers: HashMap<char, String>,
@@ -63,7 +63,8 @@ impl Register {
     #[allow(dead_code)]
     pub fn get_with_clipboard(&self, name: char) -> String {
         if name == '+' {
-            self.get_system_clipboard().unwrap_or_else(|| self.get(name))
+            self.get_system_clipboard()
+                .unwrap_or_else(|| self.get(name))
         } else {
             self.get(name)
         }

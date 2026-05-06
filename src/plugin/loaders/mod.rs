@@ -1,6 +1,6 @@
-pub mod lua;
-pub mod lisp;
 pub mod javascript;
+pub mod lisp;
+pub mod lua;
 pub mod nix;
 pub mod rust;
 
@@ -25,7 +25,11 @@ impl std::fmt::Display for LoaderError {
             LoaderError::Parse(s) => write!(f, "Parse error: {}", s),
             LoaderError::UnsupportedLanguage(s) => write!(f, "Unsupported language: {}", s),
             LoaderError::ApiVersionMismatch { expected, actual } => {
-                write!(f, "API version mismatch: expected v{}, got v{}", expected, actual)
+                write!(
+                    f,
+                    "API version mismatch: expected v{}, got v{}",
+                    expected, actual
+                )
             }
         }
     }

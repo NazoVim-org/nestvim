@@ -1,7 +1,7 @@
+use crate::types::PluginEvent;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use crate::types::PluginEvent;
 
 pub type CommandFn = Box<dyn Fn(Vec<String>)>;
 pub type EventFn = Box<dyn Fn(&PluginEvent)>;
@@ -28,7 +28,11 @@ impl PluginApi {
     }
 
     pub fn _on(&self, event: String, f: EventFn) {
-        self.event_handlers.borrow_mut().entry(event).or_insert_with(Vec::new).push(f);
+        self.event_handlers
+            .borrow_mut()
+            .entry(event)
+            .or_insert_with(Vec::new)
+            .push(f);
     }
 
     pub fn log(&self, msg: &str) {

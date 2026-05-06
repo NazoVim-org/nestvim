@@ -1,6 +1,6 @@
+use crate::types::NestvimError;
 use ropey::Rope;
 use std::path::PathBuf;
-use crate::types::NestvimError;
 
 pub struct TextBuffer {
     doc: Rope,
@@ -44,10 +44,10 @@ impl TextBuffer {
         if line_idx >= self.doc.len_lines() {
             return;
         }
-        
+
         let line_start = self.doc.line_to_char(line_idx);
         let char_idx = line_start + col.min(self.doc.line(line_idx).len_chars());
-        
+
         self.doc.insert(char_idx, text);
         self.dirty = true;
         self.modification_count += 1;
@@ -58,14 +58,14 @@ impl TextBuffer {
         if line_idx >= self.doc.len_lines() {
             return;
         }
-        
+
         let line_start = self.doc.line_to_char(line_idx);
         let char_idx = line_start + col;
-        
+
         if char_idx >= self.doc.len_chars() {
             return;
         }
-        
+
         self.doc.remove(char_idx..char_idx + 1);
         self.dirty = true;
         self.modification_count += 1;
@@ -79,26 +79,26 @@ impl TextBuffer {
         if line <= 1 || line > self.line_count() {
             return 0;
         }
-        
+
         let prev_line_idx = line - 2;
         let cur_line_idx = line - 1;
-        
+
         if prev_line_idx >= self.doc.len_lines() || cur_line_idx >= self.doc.len_lines() {
             return 0;
         }
-        
+
         let prev_line_start = self.doc.line_to_char(prev_line_idx);
         let prev_line_len = self.doc.line(prev_line_idx).len_chars();
         let newline_pos = prev_line_start + prev_line_len - 1;
-        
+
         if newline_pos >= self.doc.len_chars() {
             return 0;
         }
-        
+
         self.doc.remove(newline_pos..newline_pos + 1);
         self.dirty = true;
         self.modification_count += 1;
-        
+
         prev_line_len - 1
     }
 
@@ -194,7 +194,13 @@ impl TextBuffer {
         result
     }
 
-    pub fn get_char_range(&self, start_line: usize, start_col: usize, end_line: usize, end_col: usize) -> String {
+    pub fn get_char_range(
+        &self,
+        start_line: usize,
+        start_col: usize,
+        end_line: usize,
+        end_col: usize,
+    ) -> String {
         if start_line > end_line {
             return String::new();
         }
@@ -203,17 +209,33 @@ impl TextBuffer {
                 return String::new();
             }
             let line_str = self.get_line(start_line);
-            return line_str.chars().skip(start_col).take(end_col - start_col).collect();
+            return line_str
+                .chars()
+                .skip(start_col)
+                .take(end_col - start_col)
+                .collect();
         }
 
         let mut result = String::new();
-        result.push_str(&self.get_line(start_line).chars().skip(start_col).collect::<String>());
+        result.push_str(
+            &self
+                .get_line(start_line)
+                .chars()
+                .skip(start_col)
+                .collect::<String>(),
+        );
         result.push('\n');
         for line_num in (start_line + 1)..end_line {
             result.push_str(&self.get_line(line_num));
             result.push('\n');
         }
-        result.push_str(&self.get_line(end_line).chars().take(end_col).collect::<String>());
+        result.push_str(
+            &self
+                .get_line(end_line)
+                .chars()
+                .take(end_col)
+                .collect::<String>(),
+        );
         result
     }
 
@@ -240,7 +262,13 @@ impl TextBuffer {
         content
     }
 
-    pub fn delete_range(&mut self, start_line: usize, start_col: usize, end_line: usize, end_col: usize) -> String {
+    pub fn delete_range(
+        &mut self,
+        start_line: usize,
+        start_col: usize,
+        end_line: usize,
+        end_col: usize,
+    ) -> String {
         if start_line > end_line {
             return String::new();
         }
@@ -250,8 +278,10 @@ impl TextBuffer {
         let start_line_idx = start_line.saturating_sub(1);
         let end_line_idx = end_line.saturating_sub(1);
 
-        let char_start = self.doc.line_to_char(start_line_idx) + start_col.min(self.doc.line(start_line_idx).len_chars());
-        let char_end = self.doc.line_to_char(end_line_idx) + end_col.min(self.doc.line(end_line_idx).len_chars());
+        let char_start = self.doc.line_to_char(start_line_idx)
+            + start_col.min(self.doc.line(start_line_idx).len_chars());
+        let char_end = self.doc.line_to_char(end_line_idx)
+            + end_col.min(self.doc.line(end_line_idx).len_chars());
 
         if char_start < char_end {
             self.doc.remove(char_start..char_end);
@@ -270,21 +300,21 @@ impl TextBuffer {
             self.modification_count += 1;
         }
     }
-    
+
     #[allow(dead_code)]
     pub fn search(&self, query: &str) -> Vec<crate::types::SearchResult> {
         if query.is_empty() {
             return Vec::new();
         }
-        
+
         let query_chars: Vec<char> = query.chars().collect();
         let mut results = Vec::new();
-        
+
         for line_idx in 0..self.doc.len_lines() {
             let line = self.doc.line(line_idx);
             let line_str = line.to_string();
             let line_chars: Vec<char> = line_str.chars().collect();
-            
+
             let mut col = 0;
             while col <= line_chars.len().saturating_sub(query_chars.len()) {
                 let mut matches = true;
@@ -306,7 +336,7 @@ impl TextBuffer {
                 }
             }
         }
-        
+
         results
     }
 }
@@ -324,7 +354,7 @@ mod tests {
     #[test]
     fn test_insert_char() {
         let mut buf = TextBuffer::new();
-        buf.insert_char(1,0, 'a');
+        buf.insert_char(1, 0, 'a');
         assert_eq!(buf.get_line(1), "a");
         assert!(buf.dirty);
         assert_eq!(buf.modification_count(), 1);

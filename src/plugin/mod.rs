@@ -3,7 +3,7 @@ pub mod loaders;
 
 pub use api::{Plugin, PluginApi};
 
-use crate::types::{PluginEvent, NestvimError};
+use crate::types::{NestvimError, PluginEvent};
 use std::rc::Rc;
 
 pub struct PluginManager {
@@ -42,13 +42,12 @@ impl PluginManager {
             return Ok(());
         }
 
-        let entries = std::fs::read_dir(&plugins_dir)
-            .map_err(NestvimError::Io)?;
+        let entries = std::fs::read_dir(&plugins_dir).map_err(NestvimError::Io)?;
 
         for entry in entries {
             let entry = entry.map_err(NestvimError::Io)?;
             let path = entry.path();
-            
+
             match self.registry.load(&path, self.api.clone()) {
                 Ok(plugin) => {
                     let name = plugin.name().to_string();

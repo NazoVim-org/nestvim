@@ -4,13 +4,38 @@ use crate::types::Position;
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub enum EditType {
-    Insert { line: usize, col: usize, text: String },
-    Delete { line: usize, col: usize, text: String },
-    InsertLine { line: usize, text: String },
-    DeleteLine { line: usize, text: String },
-    Replace { line: usize, col: usize, old_text: String, new_text: String },
-    Merge { line: usize, deleted_newline_col: usize },
-    Split { line: usize, col: usize },
+    Insert {
+        line: usize,
+        col: usize,
+        text: String,
+    },
+    Delete {
+        line: usize,
+        col: usize,
+        text: String,
+    },
+    InsertLine {
+        line: usize,
+        text: String,
+    },
+    DeleteLine {
+        line: usize,
+        text: String,
+    },
+    Replace {
+        line: usize,
+        col: usize,
+        old_text: String,
+        new_text: String,
+    },
+    Merge {
+        line: usize,
+        deleted_newline_col: usize,
+    },
+    Split {
+        line: usize,
+        col: usize,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -126,7 +151,12 @@ impl UndoManager {
             EditType::DeleteLine { line, text: _ } => {
                 buffer.delete_line(*line);
             }
-            EditType::Replace { line, col, old_text, new_text } => {
+            EditType::Replace {
+                line,
+                col,
+                old_text,
+                new_text,
+            } => {
                 let start = buffer.line_to_char(line - 1) + col;
                 let end = start + old_text.len();
                 buffer.remove_range(start, end);

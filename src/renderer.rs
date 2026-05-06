@@ -34,13 +34,22 @@ impl Renderer {
         self.show_line_numbers = !self.show_line_numbers;
     }
 
-    pub fn render(&mut self, terminal: &mut Terminal, buffer: &TextBuffer, state: &EditorState) -> io::Result<()> {
+    pub fn render(
+        &mut self,
+        terminal: &mut Terminal,
+        buffer: &TextBuffer,
+        state: &EditorState,
+    ) -> io::Result<()> {
         let rows = terminal.rows().max(2);
         let visible_rows = (rows as usize).saturating_sub(2).max(1);
 
         let line_number_width = if state.show_line_numbers {
             let total_lines = buffer.line_count();
-            if total_lines == 0 { 1 } else { total_lines.to_string().len() }
+            if total_lines == 0 {
+                1
+            } else {
+                total_lines.to_string().len()
+            }
         } else {
             0
         };
@@ -54,20 +63,30 @@ impl Renderer {
             let col = state.cursor.col + 1;
             format!(
                 "-- REPLACE -- {} {}:{}",
-                state.file_path.as_ref().map_or("[No Name]", |p| p.to_str().unwrap_or("[Invalid Path]")),
-                line, col
+                state
+                    .file_path
+                    .as_ref()
+                    .map_or("[No Name]", |p| p.to_str().unwrap_or("[Invalid Path]")),
+                line,
+                col
             )
         } else {
             format!(
                 "-- {} -- {} {}{}",
                 state.mode,
-                state.file_path.as_ref().map_or("[No Name]", |p| p.to_str().unwrap_or("[Invalid Path]")),
+                state
+                    .file_path
+                    .as_ref()
+                    .map_or("[No Name]", |p| p.to_str().unwrap_or("[Invalid Path]")),
                 if state.dirty { "[+]" } else { "" },
                 if state.show_line_numbers { " " } else { "" }
             )
         };
-        
-        let confirmation_msg = state.confirmation_prompt.as_ref().map(|c| c.message.clone());
+
+        let confirmation_msg = state
+            .confirmation_prompt
+            .as_ref()
+            .map(|c| c.message.clone());
         let needs_full_render = buffer.modification_count() != self.last_modification_count
             || self.last_line_count != buffer.line_count()
             || status != self.last_status
@@ -75,7 +94,9 @@ impl Renderer {
             || self.show_line_numbers != state.show_line_numbers;
 
         if needs_full_render {
-            self.scroll_top = self.scroll_top.clamp(1, buffer.line_count().saturating_sub(visible_rows).max(1));
+            self.scroll_top = self
+                .scroll_top
+                .clamp(1, buffer.line_count().saturating_sub(visible_rows).max(1));
             self.show_line_numbers = state.show_line_numbers;
         }
 
@@ -94,7 +115,10 @@ impl Renderer {
             for i in 0..visible_rows {
                 let buf_line = self.scroll_top + i;
                 let raw_line = buffer.get_line(buf_line);
-                let display_text = if raw_line.is_empty() && buf_line > buffer.line_count() && buffer.line_count() > 0 {
+                let display_text = if raw_line.is_empty()
+                    && buf_line > buffer.line_count()
+                    && buffer.line_count() > 0
+                {
                     if state.show_line_numbers {
                         format!("{:width$}", "~", width = line_number_width)
                     } else {
@@ -102,8 +126,16 @@ impl Renderer {
                     }
                 } else {
                     if state.show_line_numbers {
-                        let line_num = if buf_line <= buffer.line_count() { buf_line } else { 0 };
-                        format!("{}{}", format!("{:width$}", line_num, width = line_number_width), raw_line)
+                        let line_num = if buf_line <= buffer.line_count() {
+                            buf_line
+                        } else {
+                            0
+                        };
+                        format!(
+                            "{}{}",
+                            format!("{:width$}", line_num, width = line_number_width),
+                            raw_line
+                        )
                     } else {
                         raw_line
                     }

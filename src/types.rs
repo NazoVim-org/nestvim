@@ -54,11 +54,11 @@ impl Marks {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     pub fn set(&mut self, name: char, position: Position) {
         self.marks.insert(name, position);
     }
-    
+
     pub fn get(&self, name: char) -> Option<Position> {
         self.marks.get(&name).copied()
     }
@@ -74,16 +74,16 @@ impl Macros {
     pub fn new() -> Self {
         Self::default()
     }
-    
-pub fn start_recording(&mut self, name: char) {
+
+    pub fn start_recording(&mut self, name: char) {
         self.recording = Some(name);
         self.macros.entry(name).or_insert_with(Vec::new);
     }
-    
+
     pub fn stop_recording(&mut self) -> Option<char> {
         self.recording.take()
     }
-    
+
     #[allow(dead_code)]
     pub fn add_key(&mut self, key: String) {
         if let Some(name) = self.recording {
@@ -92,11 +92,11 @@ pub fn start_recording(&mut self, name: char) {
             }
         }
     }
-    
+
     pub fn get(&self, name: char) -> Option<&Vec<String>> {
         self.macros.get(&name)
     }
-    
+
     pub fn is_recording(&self) -> bool {
         self.recording.is_some()
     }

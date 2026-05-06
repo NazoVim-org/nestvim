@@ -79,13 +79,21 @@ impl UndoManager {
                 buffer.insert(insert_pos, 0, text);
                 buffer.insert(insert_pos, text.len(), "\n");
             }
-            EditType::Replace { line, col, old_text, new_text } => {
+            EditType::Replace {
+                line,
+                col,
+                old_text,
+                new_text,
+            } => {
                 let start = buffer.line_to_char(line - 1) + col;
                 let end = start + new_text.len();
                 buffer.remove_range(start, end);
                 buffer.insert(*line, *col, old_text);
             }
-            EditType::Merge { line, deleted_newline_col: _ } => {
+            EditType::Merge {
+                line,
+                deleted_newline_col: _,
+            } => {
                 let line_idx = line.saturating_sub(1);
                 if line_idx + 1 < buffer.line_count() {
                     buffer.insert(line_idx, buffer.get_line(line_idx).len(), "\n");
@@ -124,7 +132,10 @@ impl UndoManager {
                 buffer.remove_range(start, end);
                 buffer.insert(*line, *col, new_text);
             }
-            EditType::Merge { line, deleted_newline_col: _ } => {
+            EditType::Merge {
+                line,
+                deleted_newline_col: _,
+            } => {
                 buffer.merge_with_prev_line(*line);
             }
             EditType::Split { line, col } => {

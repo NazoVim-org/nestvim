@@ -665,12 +665,16 @@ impl Editor {
                 }
                 _ => {}
             },
-            '>' => if let KeyCode::Char('>') = key {
-                self.indent_lines(register, true);
-            },
-            '<' => if let KeyCode::Char('<') = key {
-                self.indent_lines(register, false);
-            },
+            '>' => {
+                if let KeyCode::Char('>') = key {
+                    self.indent_lines(register, true);
+                }
+            }
+            '<' => {
+                if let KeyCode::Char('<') = key {
+                    self.indent_lines(register, false);
+                }
+            }
             _ => {}
         }
     }

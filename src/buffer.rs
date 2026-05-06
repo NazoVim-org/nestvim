@@ -41,12 +41,16 @@ impl TextBuffer {
 
     pub fn insert(&mut self, line: usize, col: usize, text: &str) {
         let line_idx = line.saturating_sub(1);
-        if line_idx >= self.doc.len_lines() {
+        if line_idx > self.doc.len_lines() {
             return;
         }
 
-        let line_start = self.doc.line_to_char(line_idx);
-        let char_idx = line_start + col.min(self.doc.line(line_idx).len_chars());
+        let char_idx = if line_idx >= self.doc.len_lines() {
+            self.doc.len_chars()
+        } else {
+            let line_start = self.doc.line_to_char(line_idx);
+            line_start + col.min(self.doc.line(line_idx).len_chars())
+        };
 
         self.doc.insert(char_idx, text);
         self.dirty = true;

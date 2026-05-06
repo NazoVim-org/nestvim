@@ -5,7 +5,7 @@ use crate::register::Register;
 use crate::renderer::Renderer;
 use crate::terminal::Terminal;
 use crate::types::{
-    ConfirmAction, EditorState, Mode, PluginEvent, SearchDirection, SearchResult, VisualType,
+    ConfirmAction, EditorState, Keymap, Mode, PluginEvent, SearchDirection, SearchResult, VisualType,
 };
 use crate::undo::UndoManager;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind, KeyModifiers};
@@ -14,30 +14,31 @@ use std::io;
 use std::time::{Duration, Instant};
 
 pub struct Editor {
-    terminal: Terminal,
-    buffer: TextBuffer,
-    highlighter: Highlighter,
-    renderer: Renderer,
-    plugin_manager: PluginManager,
-    register: Register,
-    undo_manager: UndoManager,
-    state: EditorState,
-    running: bool,
-    last_highlight_mod_count: usize,
-    last_keypress_time: Instant,
-    needs_render: bool,
-    pending_operator: Option<char>,
-    pending_register: Option<char>,
-    pending_mark: Option<char>,
-    pending_macro_play: Option<char>,
-    search_query: String,
-    search_direction: SearchDirection,
-    search_results: Vec<SearchResult>,
-    current_search_idx: usize,
-    dot_last_action: Option<DotAction>,
-    replace_char: Option<char>,
-    last_fchar: Option<char>,
-    last_fchar_till: bool,
+    pub(crate) terminal: Terminal,
+    pub(crate) buffer: TextBuffer,
+    pub(crate) highlighter: Highlighter,
+    pub(crate) renderer: Renderer,
+    pub(crate) plugin_manager: PluginManager,
+    pub(crate) register: Register,
+    pub(crate) undo_manager: UndoManager,
+    pub(crate) state: EditorState,
+    pub(crate) running: bool,
+    pub(crate) last_highlight_mod_count: usize,
+    pub(crate) last_keypress_time: Instant,
+    pub(crate) needs_render: bool,
+    pub(crate) pending_operator: Option<char>,
+    pub(crate) pending_register: Option<char>,
+    pub(crate) pending_mark: Option<char>,
+    pub(crate) pending_macro_play: Option<char>,
+    pub(crate) search_query: String,
+    pub(crate) search_direction: SearchDirection,
+    pub(crate) search_results: Vec<SearchResult>,
+    pub(crate) current_search_idx: usize,
+    pub(crate) dot_last_action: Option<DotAction>,
+    pub(crate) replace_char: Option<char>,
+    pub(crate) last_fchar: Option<char>,
+    pub(crate) last_fchar_till: bool,
+    pub(crate) keymap: Keymap,
 }
 
 #[derive(Clone)]
@@ -58,7 +59,7 @@ enum DotAction {
 }
 
 impl Editor {
-    pub async fn new(file_path: Option<&str>) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(file_path: Option<&str>, keymap: Keymap) -> Result<Self, Box<dyn std::error::Error>> {
         let mut terminal = Terminal::new()?;
 
         terminal.enable_raw_mode()?;
@@ -130,6 +131,7 @@ impl Editor {
             replace_char: None,
             last_fchar: None,
             last_fchar_till: false,
+            keymap,
         })
     }
 
@@ -192,6 +194,15 @@ impl Editor {
     }
 
     async fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
+        if self.keymap == Keymap::Emacs {
+            crate::keymap::emacs::handle_emacs_key(self, key, modifiers).await;
+            return;
+        }
+
+        self.handle_key_vim(key, modifiers).await;
+    }
+
+    pub async fn handle_key_vim(&mut self, key: KeyCode, modifiers: KeyModifiers) {
         if let KeyCode::Char(c) = key {
             self.plugin_manager.emit(PluginEvent::Key {
                 mode: self.state.mode,
@@ -2088,5 +2099,103 @@ impl Editor {
             .map(|p| p.to_str().unwrap_or(""))
             .unwrap_or("[No Name]");
         eprintln!("\"{}\" {} lines, {} characters", path, line_count, total);
+    }
+
+    pub(super) fn cursor_right(&mut self, n: usize) {
+        let line_len = self.buffer.get_line(self.state.cursor.line).len();
+        self.state.cursor.col = (self.state.cursor.col + n).min(line_len.saturating_sub(1));
+        self.needs_render = true;
+    }
+
+    pub(super) fn cursor_left(&mut self, n: usize) {
+        self.state.cursor.col = self.state.cursor.col.saturating_sub(n);
+        self.needs_render = true;
+    }
+
+    pub(super) fn cursor_down(&mut self, n: usize) {
+        let line_count = self.buffer.line_count();
+        self.state.cursor.line = (self.state.cursor.line + n).min(line_count);
+        let len = self.buffer.get_line(self.state.cursor.line).len();
+        self.state.cursor.col = self.state.cursor.col.min(len.saturating_sub(1));
+        self.needs_render = true;
+    }
+
+    pub(super) fn cursor_up(&mut self, n: usize) {
+        self.state.cursor.line = self.state.cursor.line.saturating_sub(n).max(1);
+        let len = self.buffer.get_line(self.state.cursor.line).len();
+        self.state.cursor.col = self.state.cursor.col.min(len.saturating_sub(1));
+        self.needs_render = true;
+    }
+
+    pub(super) fn cursor_line_start(&mut self) {
+        self.state.cursor.col = 0;
+        self.needs_render = true;
+    }
+
+    pub(super) fn cursor_line_end(&mut self) {
+        let line = self.buffer.get_line(self.state.cursor.line);
+        self.state.cursor.col = line.len().saturating_sub(1);
+        self.needs_render = true;
+    }
+
+    pub(super) fn delete_char_forward(&mut self) {
+        let line = self.buffer.get_line(self.state.cursor.line);
+        if self.state.cursor.col < line.len() {
+            self.buffer.delete(self.state.cursor.line, self.state.cursor.col);
+            self.state.dirty = true;
+            self.needs_render = true;
+        }
+    }
+
+    pub(super) fn kill_line(&mut self) {
+        let line = self.buffer.get_line(self.state.cursor.line);
+        if self.state.cursor.col < line.len() {
+            let end_col = line.len();
+            self.buffer.delete_range(
+                self.state.cursor.line,
+                self.state.cursor.col,
+                self.state.cursor.line,
+                end_col,
+            );
+            self.state.dirty = true;
+            self.needs_render = true;
+        }
+    }
+
+    pub(super) fn insert_char(&mut self, c: char) {
+        self.buffer.insert_char(self.state.cursor.line, self.state.cursor.col, c);
+        self.state.cursor.col += 1;
+        self.state.dirty = true;
+        self.needs_render = true;
+    }
+
+    pub(super) fn delete_char_backward(&mut self) {
+        if self.state.cursor.col > 0 {
+            self.buffer.delete(self.state.cursor.line, self.state.cursor.col - 1);
+            self.state.cursor.col -= 1;
+            self.state.dirty = true;
+            self.needs_render = true;
+        } else if self.state.cursor.line > 1 {
+            let merged = self.buffer.get_line(self.state.cursor.line - 1);
+            let prev_len = merged.len();
+            self.buffer.merge_with_prev_line(self.state.cursor.line);
+            self.state.cursor.line -= 1;
+            self.state.cursor.col = prev_len.saturating_sub(1);
+            self.state.dirty = true;
+            self.needs_render = true;
+        }
+    }
+
+    pub(super) fn insert_newline(&mut self) {
+        let line = self.buffer.get_line(self.state.cursor.line);
+        let (_, after) = line.split_at(self.state.cursor.col);
+        self.buffer.insert(self.state.cursor.line, self.state.cursor.col, "\n");
+        if !after.is_empty() {
+            self.buffer.insert(self.state.cursor.line + 1, 0, after);
+        }
+        self.state.cursor.line += 1;
+        self.state.cursor.col = 0;
+        self.state.dirty = true;
+        self.needs_render = true;
     }
 }

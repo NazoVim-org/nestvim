@@ -56,7 +56,7 @@ impl super::Loader for LuaLoader {
                 .map_err(|e| super::LoaderError::Parse(format!("Lua error: {}", e)))?,
         );
 
-        let _ = lua
+        lua
             .globals()
             .get::<_, mlua::Table>("nestvim")
             .map_err(|e| super::LoaderError::Parse(format!("Lua error: {}", e)))?

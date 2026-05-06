@@ -383,7 +383,7 @@ impl Editor {
             }
             KeyCode::Char('q') => {
                 if let KeyCode::Char(c) = key {
-                    if ('a'..='z').contains(&c) {
+                    if c.is_ascii_lowercase() {
                         self.toggle_macro_recording(c);
                         self.needs_render = true;
                         return;
@@ -493,7 +493,7 @@ impl Editor {
 
                 if let Some(_pending) = self.pending_macro_play {
                     if let KeyCode::Char(c) = key {
-                        if ('a'..='z').contains(&c) {
+                        if c.is_ascii_lowercase() {
                             self.play_macro(c);
                             self.pending_macro_play = None;
                             self.needs_render = true;
@@ -532,7 +532,7 @@ impl Editor {
                 }
                 if let Some(pending) = self.pending_mark {
                     if let KeyCode::Char(c) = key {
-                        if (pending == 'm' && ('a'..='z').contains(&c))
+                        if (pending == 'm' && c.is_ascii_lowercase())
                             || (pending == '`' || pending == '\'')
                         {
                             self.handle_mark(pending, c);
@@ -545,7 +545,7 @@ impl Editor {
                 }
                 if let Some(_r) = self.pending_register {
                     if let KeyCode::Char(c) = key {
-                        if ('a'..='z').contains(&c) {
+                        if c.is_ascii_lowercase() {
                             self.pending_register = Some(c);
                             return;
                         }
@@ -557,13 +557,12 @@ impl Editor {
 
         if let Some(r) = self.pending_register {
             if let KeyCode::Char(c) = key {
-                if ('a'..='z').contains(&c) {
+                if c.is_ascii_lowercase() {
                     self.pending_register = None;
                     if let Some(op) = self.pending_operator {
                         self.pending_operator = None;
                         let reg = r;
                         self.execute_operator_with_register(op, reg, key).await;
-                        return;
                     }
                 }
             }
@@ -680,35 +679,32 @@ impl Editor {
     }
 
     async fn handle_text_object_change(&mut self, key: KeyCode, register: char, inner: bool) {
-        match key {
-            KeyCode::Char('w') => {
-                if inner {
-                    let (word, start, _) = self
-                        .buffer
-                        .get_word_range(self.state.cursor.line, self.state.cursor.col);
-                    if !word.is_empty() {
-                        let content = self.buffer.get_char_range(
-                            self.state.cursor.line,
-                            start,
-                            self.state.cursor.line,
-                            start + word.len(),
-                        );
-                        self.register.set(register, &content);
-                        let char_start =
-                            self.buffer.line_to_char(self.state.cursor.line - 1) + start;
-                        let char_end = char_start + word.len();
-                        self.buffer.remove_range(char_start, char_end);
-                    }
+        if let KeyCode::Char('w') = key {
+            if inner {
+                let (word, start, _) = self
+                    .buffer
+                    .get_word_range(self.state.cursor.line, self.state.cursor.col);
+                if !word.is_empty() {
+                    let content = self.buffer.get_char_range(
+                        self.state.cursor.line,
+                        start,
+                        self.state.cursor.line,
+                        start + word.len(),
+                    );
+                    self.register.set(register, &content);
+                    let char_start =
+                        self.buffer.line_to_char(self.state.cursor.line - 1) + start;
+                    let char_end = char_start + word.len();
+                    self.buffer.remove_range(char_start, char_end);
                 }
-                let prev_mode = self.state.mode;
-                self.state.mode = Mode::Insert;
-                self.plugin_manager.emit(PluginEvent::ModeChange {
-                    from: prev_mode,
-                    to: Mode::Insert,
-                });
-                self.on_buffer_modified();
             }
-            _ => {}
+            let prev_mode = self.state.mode;
+            self.state.mode = Mode::Insert;
+            self.plugin_manager.emit(PluginEvent::ModeChange {
+                from: prev_mode,
+                to: Mode::Insert,
+            });
+            self.on_buffer_modified();
         }
     }
 

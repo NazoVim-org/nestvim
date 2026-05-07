@@ -1,5 +1,4 @@
 use crate::editor::Editor;
-use crate::types::Keymap;
 use std::sync::Arc;
 
 mod vim;
@@ -7,15 +6,15 @@ pub mod emacs;
 
 pub use vim::VimKeymap;
 pub use emacs::EmacsKeymap;
-
-pub fn create_keymap(keymap: Keymap) -> Arc<dyn KeymapHandler + Send + Sync> {
-    match keymap {
-        Keymap::Vim => Arc::new(VimKeymap::new()),
-        Keymap::Emacs => Arc::new(EmacsKeymap::new()),
-    }
-}
+use crossterm::event::{KeyCode, KeyModifiers};
 
 pub trait KeymapHandler: Send + Sync {
-    fn handle_key(&self, editor: &mut Editor);
-    fn name(&self) -> &'static str;
+    fn handle_key(&self, editor: &mut Editor, key: KeyCode, modifiers: KeyModifiers);
+}
+
+pub fn create_keymap(keymap: crate::types::Keymap) -> Arc<dyn KeymapHandler> {
+    match keymap {
+        crate::types::Keymap::Vim => Arc::new(VimKeymap::new()),
+        crate::types::Keymap::Emacs => Arc::new(EmacsKeymap::new()),
+    }
 }

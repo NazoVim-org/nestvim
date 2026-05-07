@@ -42,7 +42,7 @@ pub struct Editor {
 }
 
 #[derive(Clone)]
-enum DotAction {
+pub(crate) enum DotAction {
     Insert {
         text: String,
     },
@@ -195,7 +195,8 @@ impl Editor {
 
     async fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
         if self.keymap == Keymap::Emacs {
-            crate::keymap::emacs::handle_emacs_key(self, key, modifiers).await;
+            let handler = crate::keymap::create_keymap(self.keymap);
+            handler.handle_key(self, key, modifiers);
             return;
         }
 
@@ -2052,7 +2053,7 @@ impl Editor {
         self.on_buffer_modified();
     }
 
-    fn scroll_cursor_to_center(&mut self) {
+    pub fn scroll_cursor_to_center(&mut self) {
         let terminal_rows = self.terminal.rows() as usize;
         let visible_rows = terminal_rows.saturating_sub(2);
         let scroll_pos = self.state.cursor.line.saturating_sub(visible_rows / 2);
@@ -2075,7 +2076,7 @@ impl Editor {
         self.state.show_line_numbers = !self.state.show_line_numbers;
     }
 
-    fn scroll_up_one(&mut self) {
+    pub fn scroll_up_one(&mut self) {
         if self.state.cursor.line > 1 {
             self.state.cursor.line -= 1;
         }
@@ -2197,5 +2198,84 @@ impl Editor {
         self.state.cursor.col = 0;
         self.state.dirty = true;
         self.needs_render = true;
+    }
+
+    pub fn kill_word(&mut self) {
+        let (_, _, end_col) = self.buffer.get_word_range(self.state.cursor.line, self.state.cursor.col);
+        if end_col > self.state.cursor.col {
+            self.buffer.delete_range(
+                self.state.cursor.line,
+                self.state.cursor.col,
+                self.state.cursor.line,
+                end_col,
+            );
+            self.state.dirty = true;
+            self.needs_render = true;
+        } else if self.state.cursor.line < self.buffer.line_count() {
+            self.buffer.delete_range(
+                self.state.cursor.line,
+                self.state.cursor.col,
+                self.state.cursor.line + 1,
+                0,
+            );
+            self.state.dirty = true;
+            self.needs_render = true;
+        }
+    }
+
+    pub fn yank_pop(&mut self) {
+        self.undo();
+    }
+
+    pub fn transpose_chars(&mut self) {
+        let line = self.state.cursor.line;
+        let col = self.state.cursor.col;
+
+        if col > 0 {
+            let char1 = self.buffer.get_line(line).chars().nth(col - 1);
+            let char2 = self.buffer.get_line(line).chars().nth(col);
+
+            if let (Some(c1), Some(c2)) = (char1, char2) {
+                self.buffer.delete(line, col);
+                self.buffer.delete(line, col - 1);
+                self.buffer.insert_char(line, col - 2, c2);
+                self.buffer.insert_char(line, col - 1, c1);
+                self.state.cursor.col = (col + 1).min(self.buffer.get_line(line).len());
+                self.state.dirty = true;
+                self.needs_render = true;
+            }
+        }
+    }
+
+    pub fn insert_tab(&mut self) {
+        self.buffer.insert_char(self.state.cursor.line, self.state.cursor.col, '\t');
+        self.state.cursor.col += 1;
+        self.state.dirty = true;
+        self.needs_render = true;
+    }
+
+    pub fn scroll_up(&mut self) {
+        let rows = self.terminal.rows() as usize;
+        self.scroll_by(rows);
+        self.needs_render = true;
+    }
+
+    pub fn scroll_down(&mut self) {
+        let rows = self.terminal.rows() as usize;
+        self.scroll_by(rows.saturating_sub(1));
+        self.needs_render = true;
+    }
+
+    pub fn clear_screen(&mut self) {
+        let _ = self.terminal.clear_screen();
+        self.needs_render = true;
+    }
+
+    pub fn abort(&mut self) {
+        self.state.command_buffer.clear();
+        if self.state.mode == Mode::Command {
+            self.state.mode = Mode::Normal;
+            self.needs_render = true;
+        }
     }
 }

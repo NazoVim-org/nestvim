@@ -1,5 +1,6 @@
 use crate::editor::Editor;
 use crate::keymap::KeymapHandler;
+use crossterm::event::{KeyCode, KeyModifiers};
 
 pub struct VimKeymap;
 
@@ -10,9 +11,5 @@ impl VimKeymap {
 }
 
 impl KeymapHandler for VimKeymap {
-    fn handle_key(&self, _editor: &mut Editor) {}
-
-    fn name(&self) -> &'static str {
-        "vim"
-    }
+    fn handle_key(&self, _editor: &mut Editor, _key: KeyCode, _modifiers: KeyModifiers) {}
 }

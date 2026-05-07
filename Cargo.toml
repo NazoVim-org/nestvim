@@ -22,6 +22,7 @@ atty = "0.2"
 clap = { version = "4", features = ["derive"] }
 arboard = "3"
 quickjs-rusty = "0.11"
+async-trait = "0.1"
 
 [profile.release]
 lto = true

@@ -1,5 +1,7 @@
 use crate::buffer::TextBuffer;
 use crate::highlight::Highlighter;
+use crate::keymap::create_keymap;
+use crate::keymap::KeymapHandler;
 use crate::plugin::PluginManager;
 use crate::register::Register;
 use crate::renderer::Renderer;
@@ -8,6 +10,8 @@ use crate::types::{
     ConfirmAction, EditorState, Keymap, Mode, PluginEvent, SearchDirection, SearchResult, VisualType,
 };
 use crate::undo::UndoManager;
+use std::cell::RefCell;
+use std::rc::Rc;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind, KeyModifiers};
 use futures::StreamExt;
 use std::io;
@@ -39,6 +43,8 @@ pub struct Editor {
     pub(crate) last_fchar: Option<char>,
     pub(crate) last_fchar_till: bool,
     pub(crate) keymap: Keymap,
+    pub(crate) keymap_handler: Rc<RefCell<dyn KeymapHandler>>,
+    pub(crate) pending_save: bool,
 }
 
 #[derive(Clone)]
@@ -132,6 +138,8 @@ impl Editor {
             last_fchar: None,
             last_fchar_till: false,
             keymap,
+            keymap_handler: create_keymap(keymap),
+            pending_save: false,
         })
     }
 
@@ -150,6 +158,11 @@ impl Editor {
 
         while self.running {
             self.state.dirty = self.buffer.dirty;
+
+            if self.pending_save {
+                self.pending_save = false;
+                self.save_file_async().await;
+            }
 
             tokio::select! {
                 Some(event) = reader.next() => {
@@ -195,8 +208,8 @@ impl Editor {
 
     async fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
         if self.keymap == Keymap::Emacs {
-            let handler = crate::keymap::create_keymap(self.keymap);
-            handler.handle_key(self, key, modifiers);
+            let editor_ptr = self as *mut Editor;
+            self.keymap_handler.borrow_mut().handle_key(editor_ptr, key, modifiers);
             return;
         }
 
@@ -1327,7 +1340,7 @@ impl Editor {
         self.needs_render = true;
     }
 
-    fn undo(&mut self) {
+    pub(crate) fn undo(&mut self) {
         if let Some(edit) = self.undo_manager.undo(&mut self.buffer) {
             self.state.cursor = edit.cursor_before;
             self.needs_render = true;
@@ -1335,7 +1348,7 @@ impl Editor {
     }
 
     #[allow(dead_code)]
-    fn redo(&mut self) {
+    pub(crate) fn redo(&mut self) {
         if let Some(edit) = self.undo_manager.redo(&mut self.buffer) {
             self.state.cursor = edit.cursor_after;
             self.needs_render = true;
@@ -1815,7 +1828,7 @@ impl Editor {
         self.state.cursor.col = self.state.cursor.col.min(len.saturating_sub(1));
     }
 
-    fn scroll_by(&mut self, lines: usize) {
+    pub(crate) fn scroll_by(&mut self, lines: usize) {
         if self.state.cursor.line > lines {
             self.state.cursor.line -= lines;
         } else {
@@ -2102,18 +2115,18 @@ impl Editor {
         eprintln!("\"{}\" {} lines, {} characters", path, line_count, total);
     }
 
-    pub(super) fn cursor_right(&mut self, n: usize) {
+    pub(crate) fn cursor_right(&mut self, n: usize) {
         let line_len = self.buffer.get_line(self.state.cursor.line).len();
         self.state.cursor.col = (self.state.cursor.col + n).min(line_len.saturating_sub(1));
         self.needs_render = true;
     }
 
-    pub(super) fn cursor_left(&mut self, n: usize) {
+    pub(crate) fn cursor_left(&mut self, n: usize) {
         self.state.cursor.col = self.state.cursor.col.saturating_sub(n);
         self.needs_render = true;
     }
 
-    pub(super) fn cursor_down(&mut self, n: usize) {
+    pub(crate) fn cursor_down(&mut self, n: usize) {
         let line_count = self.buffer.line_count();
         self.state.cursor.line = (self.state.cursor.line + n).min(line_count);
         let len = self.buffer.get_line(self.state.cursor.line).len();
@@ -2121,25 +2134,25 @@ impl Editor {
         self.needs_render = true;
     }
 
-    pub(super) fn cursor_up(&mut self, n: usize) {
+    pub(crate) fn cursor_up(&mut self, n: usize) {
         self.state.cursor.line = self.state.cursor.line.saturating_sub(n).max(1);
         let len = self.buffer.get_line(self.state.cursor.line).len();
         self.state.cursor.col = self.state.cursor.col.min(len.saturating_sub(1));
         self.needs_render = true;
     }
 
-    pub(super) fn cursor_line_start(&mut self) {
+    pub(crate) fn cursor_line_start(&mut self) {
         self.state.cursor.col = 0;
         self.needs_render = true;
     }
 
-    pub(super) fn cursor_line_end(&mut self) {
+    pub(crate) fn cursor_line_end(&mut self) {
         let line = self.buffer.get_line(self.state.cursor.line);
         self.state.cursor.col = line.len().saturating_sub(1);
         self.needs_render = true;
     }
 
-    pub(super) fn delete_char_forward(&mut self) {
+    pub(crate) fn delete_char_forward(&mut self) {
         let line = self.buffer.get_line(self.state.cursor.line);
         if self.state.cursor.col < line.len() {
             self.buffer.delete(self.state.cursor.line, self.state.cursor.col);
@@ -2148,7 +2161,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn kill_line(&mut self) {
+    pub(crate) fn kill_line(&mut self) {
         let line = self.buffer.get_line(self.state.cursor.line);
         if self.state.cursor.col < line.len() {
             let end_col = line.len();
@@ -2163,14 +2176,14 @@ impl Editor {
         }
     }
 
-    pub(super) fn insert_char(&mut self, c: char) {
+    pub(crate) fn insert_char(&mut self, c: char) {
         self.buffer.insert_char(self.state.cursor.line, self.state.cursor.col, c);
         self.state.cursor.col += 1;
         self.state.dirty = true;
         self.needs_render = true;
     }
 
-    pub(super) fn delete_char_backward(&mut self) {
+    pub(crate) fn delete_char_backward(&mut self) {
         if self.state.cursor.col > 0 {
             self.buffer.delete(self.state.cursor.line, self.state.cursor.col - 1);
             self.state.cursor.col -= 1;
@@ -2187,7 +2200,7 @@ impl Editor {
         }
     }
 
-    pub(super) fn insert_newline(&mut self) {
+    pub(crate) fn insert_newline(&mut self) {
         let line = self.buffer.get_line(self.state.cursor.line);
         let (_, after) = line.split_at(self.state.cursor.col);
         self.buffer.insert(self.state.cursor.line, self.state.cursor.col, "\n");
@@ -2277,5 +2290,18 @@ impl Editor {
             self.state.mode = Mode::Normal;
             self.needs_render = true;
         }
+    }
+
+    pub async fn save_file_async(&mut self) {
+        if let Err(e) = self.buffer.save_file().await {
+            eprintln!("Save failed: {}", e);
+        } else {
+            self.state.dirty = false;
+        }
+        self.needs_render = true;
+    }
+
+    pub fn quit(&mut self) {
+        self.running = false;
     }
 }

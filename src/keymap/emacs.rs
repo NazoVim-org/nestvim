@@ -3,17 +3,34 @@ use crate::keymap::KeymapHandler;
 use crate::types::PluginEvent;
 use crossterm::event::{KeyCode, KeyModifiers};
 
-pub struct EmacsKeymap;
+pub struct EmacsKeymap {
+    prefix_state: EmacsPrefixState,
+    pending_save: bool,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum EmacsPrefixState {
+    None,
+    WaitingCx,
+}
 
 impl EmacsKeymap {
     pub fn new() -> Self {
-        Self
+        Self {
+            prefix_state: EmacsPrefixState::None,
+            pending_save: false,
+        }
     }
 }
 
 impl KeymapHandler for EmacsKeymap {
-    fn handle_key(&self, editor: &mut Editor, key: KeyCode, modifiers: KeyModifiers) {
-        use crossterm::event::KeyModifiers;
+    fn handle_key(&mut self, editor: *mut Editor, key: KeyCode, modifiers: KeyModifiers) {
+        let editor = unsafe { &mut *editor };
+
+        if self.pending_save {
+            self.pending_save = false;
+            editor.pending_save = true;
+        }
 
         let has_ctrl = modifiers.contains(KeyModifiers::CONTROL);
 
@@ -24,7 +41,36 @@ impl KeymapHandler for EmacsKeymap {
             });
         }
 
+        match self.prefix_state {
+            EmacsPrefixState::WaitingCx => {
+                self.prefix_state = EmacsPrefixState::None;
+                match (has_ctrl, key) {
+                    (true, KeyCode::Char('s')) => {
+                        self.pending_save = true;
+                        return;
+                    }
+                    (true, KeyCode::Char('c')) => {
+                        editor.quit();
+                        return;
+                    }
+                    (true, KeyCode::Char('h')) => {
+                        editor.cursor_line_start();
+                        return;
+                    }
+                    (true, KeyCode::Char('d')) => {
+                        editor.cursor_line_end();
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+            EmacsPrefixState::None => {}
+        }
+
         match (has_ctrl, key) {
+            (true, KeyCode::Char('x')) => {
+                self.prefix_state = EmacsPrefixState::WaitingCx;
+            }
             (true, KeyCode::Char('f')) => {
                 editor.cursor_right(1);
             }
@@ -58,11 +104,15 @@ impl KeymapHandler for EmacsKeymap {
             (true, KeyCode::Char('y')) => {
                 editor.yank_pop();
             }
+            (true, KeyCode::Char('o')) => {
+                editor.save_current_buffer();
+            }
             (true, KeyCode::Char('t')) => {
                 editor.transpose_chars();
             }
             (true, KeyCode::Char('v')) => {
                 editor.scroll_up_one();
+                editor.needs_render = true;
             }
             (true, KeyCode::Char('l')) => {
                 editor.clear_screen();
@@ -70,6 +120,15 @@ impl KeymapHandler for EmacsKeymap {
             }
             (true, KeyCode::Char('g')) => {
                 editor.abort();
+            }
+            (true, KeyCode::Char('/')) => {
+                editor.undo();
+            }
+            (true, KeyCode::Char('_')) => {
+                editor.undo();
+            }
+            (true, KeyCode::Char('?')) => {
+                editor.undo();
             }
             (false, KeyCode::Char(c)) if !c.is_control() => {
                 editor.insert_char(c);
@@ -112,5 +171,11 @@ impl KeymapHandler for EmacsKeymap {
             }
             _ => {}
         }
+    }
+}
+
+impl Default for EmacsKeymap {
+    fn default() -> Self {
+        Self::new()
     }
 }

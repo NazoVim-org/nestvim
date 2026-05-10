@@ -11,5 +11,5 @@ impl VimKeymap {
 }
 
 impl KeymapHandler for VimKeymap {
-    fn handle_key(&self, _editor: &mut Editor, _key: KeyCode, _modifiers: KeyModifiers) {}
+    fn handle_key(&mut self, _editor: *mut Editor, _key: KeyCode, _modifiers: KeyModifiers) {}
 }

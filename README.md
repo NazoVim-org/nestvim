@@ -17,6 +17,11 @@ A minimal Vim-like TUI editor written in Rust.
 cargo install nestvim
 ```
 
+## キーマップ互換レベル
+
+- [Vim キーマップ互換レベル](docs/keymap-vim.md)
+- [Emacs キーマップ互換レベル](docs/keymap-emacs.md)
+
 ## Development
 
 ```sh

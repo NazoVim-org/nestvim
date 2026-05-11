@@ -11,23 +11,40 @@ mod undo;
 
 use crate::editor::Editor;
 use crate::types::Keymap;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "nestvim")]
 #[command(version = "0.1.0")]
 #[command(about = "A minimal Vim-like TUI editor written in Rust", long_about = None)]
 struct Cli {
-    /// Keymap: vim or emacs
-    keymap: Option<String>,
-    /// File to edit
+    /// Mode command: vim or emacs
+    #[command(subcommand)]
+    mode: Option<ModeCommand>,
+
+    /// File to edit when no mode command is specified
     file: Option<String>,
 }
 
-fn parse_keymap(s: Option<String>) -> Keymap {
-    match s.as_deref() {
-        Some("emacs") => Keymap::Emacs,
-        _ => Keymap::Vim,
+#[derive(Subcommand)]
+enum ModeCommand {
+    /// Start in Vim keymap mode
+    Vim {
+        /// File to edit
+        file: Option<String>,
+    },
+    /// Start in Emacs keymap mode
+    Emacs {
+        /// File to edit
+        file: Option<String>,
+    },
+}
+
+fn resolve_cli(cli: Cli) -> (Keymap, Option<String>) {
+    match cli.mode {
+        Some(ModeCommand::Vim { file }) => (Keymap::Vim, file),
+        Some(ModeCommand::Emacs { file }) => (Keymap::Emacs, file),
+        None => (Keymap::Vim, cli.file),
     }
 }
 
@@ -42,9 +59,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }));
 
     let cli = Cli::parse();
-    let keymap = parse_keymap(cli.keymap);
+    let (keymap, file) = resolve_cli(cli);
 
-    let mut editor = Editor::new(cli.file.as_deref(), keymap).await?;
+    let mut editor = Editor::new(file.as_deref(), keymap).await?;
     editor.run().await?;
 
     Ok(())

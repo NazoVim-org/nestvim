@@ -1,5 +1,6 @@
 use crate::editor::Editor;
 use crate::keymap::KeymapHandler;
+use crate::state::Mode;
 use crate::types::PluginEvent;
 use crossterm::event::{KeyCode, KeyModifiers};
 
@@ -105,7 +106,21 @@ impl KeymapHandler for EmacsKeymap {
                 editor.yank_pop();
             }
             (true, KeyCode::Char('o')) => {
+                // Spec decision: keep C-o as a legacy direct save trigger.
+                // Preferred Emacs-style save is C-x C-s, but C-o remains supported
+                // for compatibility with existing nestvim behavior.
                 editor.pending_save = true;
+            }
+            (true, KeyCode::Char('s')) => {
+                let prev_mode = editor.state.mode;
+                editor.state.mode = Mode::Command;
+                editor.state.command_buffer.clear();
+                editor.state.command_buffer.push('/');
+                editor.plugin_manager.emit(PluginEvent::ModeChange {
+                    from: prev_mode,
+                    to: Mode::Command,
+                });
+                editor.needs_render = true;
             }
             (true, KeyCode::Char('t')) => {
                 editor.transpose_chars();

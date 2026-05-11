@@ -12,11 +12,13 @@ impl VimKeymap {
 }
 
 impl KeymapHandler for VimKeymap {
-    fn handle_key(&mut self, editor: *mut Editor, key: KeyCode, modifiers: KeyModifiers) {
-        let runtime = tokio::runtime::Handle::current();
-        runtime.block_on(async {
-            // SAFETY: editor pointer is created from &mut self in Editor::handle_key.
-            let editor = unsafe { &mut *editor };
+    fn handle_key<'a>(
+        &'a mut self,
+        editor: &'a mut Editor,
+        key: KeyCode,
+        modifiers: KeyModifiers,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'a>> {
+        Box::pin(async move {
             editor.vim_on_key_event(key);
 
             if modifiers.contains(KeyModifiers::CONTROL) {
@@ -60,6 +62,6 @@ impl KeymapHandler for VimKeymap {
                 Mode::Visual => editor.handle_visual(key).await,
                 Mode::Replace => editor.handle_replace(key).await,
             }
-        });
+        })
     }
 }

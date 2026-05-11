@@ -2,12 +2,12 @@ use crate::editor::Editor;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-mod vim;
 pub mod emacs;
+mod vim;
 
-pub use vim::VimKeymap;
-pub use emacs::EmacsKeymap;
 use crossterm::event::{KeyCode, KeyModifiers};
+pub use emacs::EmacsKeymap;
+pub use vim::VimKeymap;
 
 pub trait KeymapHandler: Send + Sync {
     fn handle_key(&mut self, editor: *mut Editor, key: KeyCode, modifiers: KeyModifiers);

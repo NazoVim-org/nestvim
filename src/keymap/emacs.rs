@@ -50,7 +50,7 @@ impl KeymapHandler for EmacsKeymap {
                         return;
                     }
                     (true, KeyCode::Char('c')) => {
-                        editor.quit();
+                        editor.handle_quit();
                         return;
                     }
                     (true, KeyCode::Char('h')) => {

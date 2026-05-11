@@ -119,10 +119,11 @@ impl Editor {
         })
     }
 
-    pub async fn new(
+  pub async fn new(
         file_path: Option<&str>,
         keymap: Keymap,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+
         // 既存のまま
         let mut terminal = Terminal::new()?;
 
@@ -270,8 +271,8 @@ impl Editor {
             .borrow_mut()
             .handle_key(editor_ptr, key, modifiers);
     }
-    
-    pub(crate) fn vim_on_key_event(&mut self, key: KeyCode) {
+
+  pub(crate) fn vim_on_key_event(&mut self, key: KeyCode) {
         if let KeyCode::Char(c) = key {
             self.plugin_manager.emit(PluginEvent::Key {
                 mode: self.state.mode,

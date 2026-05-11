@@ -89,6 +89,10 @@ impl TextBuffer {
         self.insert(line, col, &ch.to_string());
     }
 
+    pub fn insert_newline(&mut self, line: usize, col: usize) {
+        self.insert(line, col, "\n");
+    }
+
     pub fn merge_with_prev_line(&mut self, line: usize) -> usize {
         if line <= 1 || line > self.line_count() {
             return 0;

@@ -1665,7 +1665,7 @@ impl Editor {
         }
     }
 
-    async fn handle_confirmation(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_confirmation(&mut self, key: KeyCode) {
         let should_quit = match key {
             KeyCode::Char('y') | KeyCode::Enter => true,
             KeyCode::Char('n') | KeyCode::Esc => false,
@@ -2484,5 +2484,43 @@ mod tests {
 
         assert!(editor.state.has_confirmation());
         assert!(editor.running);
+    }
+
+    #[tokio::test]
+    async fn emacs_dirty_quit_confirmation_accept_exits_editor() {
+        let mut editor = test_editor(Keymap::Emacs);
+        editor.buffer.dirty = true;
+
+        editor
+            .handle_key_for_test(KeyCode::Char('x'), KeyModifiers::CONTROL)
+            .await;
+        editor
+            .handle_key_for_test(KeyCode::Char('c'), KeyModifiers::CONTROL)
+            .await;
+        assert!(editor.state.has_confirmation());
+        assert!(editor.running);
+
+        editor
+            .handle_key_for_test(KeyCode::Char('y'), KeyModifiers::NONE)
+            .await;
+
+        assert!(!editor.state.has_confirmation());
+        assert!(!editor.running);
+    }
+
+    #[tokio::test]
+    async fn emacs_clean_quit_exits_immediately() {
+        let mut editor = test_editor(Keymap::Emacs);
+        editor.buffer.dirty = false;
+
+        editor
+            .handle_key_for_test(KeyCode::Char('x'), KeyModifiers::CONTROL)
+            .await;
+        editor
+            .handle_key_for_test(KeyCode::Char('c'), KeyModifiers::CONTROL)
+            .await;
+
+        assert!(!editor.state.has_confirmation());
+        assert!(!editor.running);
     }
 }

@@ -46,6 +46,11 @@ impl KeymapHandler for EmacsKeymap {
                 });
             }
 
+            if editor.state.has_confirmation() {
+                editor.handle_confirmation(key).await;
+                return;
+            }
+
             match self.prefix_state {
                 EmacsPrefixState::WaitingCx => {
                     self.prefix_state = EmacsPrefixState::None;

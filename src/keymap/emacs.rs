@@ -1,6 +1,6 @@
 use crate::editor::Editor;
 use crate::keymap::KeymapHandler;
-use crate::state::Mode;
+use crate::types::Mode;
 use crate::types::PluginEvent;
 use crossterm::event::{KeyCode, KeyModifiers};
 

@@ -119,14 +119,13 @@ impl Editor {
         })
     }
 
-  pub async fn new(
+    pub async fn new(
         file_path: Option<&str>,
         keymap: Keymap,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-
         // 既存のまま
-      
-      let mut terminal = Terminal::new()?;
+
+        let mut terminal = Terminal::new()?;
 
         terminal.enable_raw_mode()?;
 
@@ -270,7 +269,7 @@ impl Editor {
             .handle_key(editor_ptr, key, modifiers);
     }
 
-  pub(crate) fn vim_on_key_event(&mut self, key: KeyCode) {
+    pub(crate) fn vim_on_key_event(&mut self, key: KeyCode) {
         if let KeyCode::Char(c) = key {
             self.plugin_manager.emit(PluginEvent::Key {
                 mode: self.state.mode,
@@ -2115,14 +2114,14 @@ impl Editor {
         }
     }
 
-    fn scroll_down_one(&mut self) {
+    pub fn scroll_down_one(&mut self) {
         let line_count = self.buffer.line_count();
         if self.state.cursor.line < line_count {
             self.state.cursor.line += 1;
         }
     }
 
-    fn show_file_info(&mut self) {
+    pub fn show_file_info(&mut self) {
         let line_count = self.buffer.line_count();
         let _col = self.state.cursor.col + 1;
         let total = self.buffer.len_chars();

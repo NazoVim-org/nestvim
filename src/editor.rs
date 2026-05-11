@@ -265,22 +265,12 @@ impl Editor {
     }
 
     async fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
-
         let editor_ptr = self as *mut Editor;
         self.keymap_handler
             .borrow_mut()
             .handle_key(editor_ptr, key, modifiers);
-        if self.keymap == Keymap::Emacs {
-            let editor_ptr = self as *mut Editor;
-            self.keymap_handler
-                .borrow_mut()
-                .handle_key(editor_ptr, key, modifiers);
-            return;
-        }
-
-        self.handle_key_vim(key, modifiers).await;
     }
-
+    
     pub(crate) fn vim_on_key_event(&mut self, key: KeyCode) {
         if let KeyCode::Char(c) = key {
             self.plugin_manager.emit(PluginEvent::Key {

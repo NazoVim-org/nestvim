@@ -16,6 +16,27 @@ pub enum NestvimError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Keymap {
+    Vim,
+    Emacs,
+}
+
+impl Default for Keymap {
+    fn default() -> Self {
+        Keymap::Vim
+    }
+}
+
+impl std::fmt::Display for Keymap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Keymap::Vim => write!(f, "vim"),
+            Keymap::Emacs => write!(f, "emacs"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Normal,
     Insert,

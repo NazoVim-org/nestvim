@@ -1,23 +1,40 @@
-mod buffer;
-mod editor;
-mod highlight;
-mod plugin;
-mod register;
-mod renderer;
-mod terminal;
-mod types;
-mod undo;
-
-use crate::editor::Editor;
-use clap::Parser;
+use clap::{Parser, Subcommand};
+use nestvim::editor::Editor;
+use nestvim::types::Keymap;
 
 #[derive(Parser)]
 #[command(name = "nestvim")]
 #[command(version = "0.1.0")]
 #[command(about = "A minimal Vim-like TUI editor written in Rust", long_about = None)]
 struct Cli {
-    /// File to edit
+    /// Mode command: vim or emacs
+    #[command(subcommand)]
+    mode: Option<ModeCommand>,
+
+    /// File to edit when no mode command is specified
     file: Option<String>,
+}
+
+#[derive(Subcommand)]
+enum ModeCommand {
+    /// Start in Vim keymap mode
+    Vim {
+        /// File to edit
+        file: Option<String>,
+    },
+    /// Start in Emacs keymap mode
+    Emacs {
+        /// File to edit
+        file: Option<String>,
+    },
+}
+
+fn resolve_cli(cli: Cli) -> (Keymap, Option<String>) {
+    match cli.mode {
+        Some(ModeCommand::Vim { file }) => (Keymap::Vim, file.or(cli.file)),
+        Some(ModeCommand::Emacs { file }) => (Keymap::Emacs, file.or(cli.file)),
+        None => (Keymap::Vim, cli.file),
+    }
 }
 
 #[tokio::main]
@@ -31,9 +48,82 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }));
 
     let cli = Cli::parse();
+    let (keymap, file) = resolve_cli(cli);
 
-    let mut editor = Editor::new(cli.file.as_deref()).await?;
+    let mut editor = Editor::new(file.as_deref(), keymap).await?;
     editor.run().await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_vim_subcommand_without_file() {
+        let cli = Cli::try_parse_from(["nestvim", "vim"]).expect("vim subcommand should parse");
+        let (keymap, file) = resolve_cli(cli);
+        assert_eq!(keymap, Keymap::Vim);
+        assert_eq!(file, None);
+    }
+
+    #[test]
+    fn parses_emacs_subcommand_without_file() {
+        let cli = Cli::try_parse_from(["nestvim", "emacs"]).expect("emacs subcommand should parse");
+        let (keymap, file) = resolve_cli(cli);
+        assert_eq!(keymap, Keymap::Emacs);
+        assert_eq!(file, None);
+    }
+
+    #[test]
+    fn parses_vim_subcommand_with_file() {
+        let cli = Cli::try_parse_from(["nestvim", "vim", "sample.txt"])
+            .expect("vim subcommand with file should parse");
+        let (keymap, file) = resolve_cli(cli);
+        assert_eq!(keymap, Keymap::Vim);
+        assert_eq!(file.as_deref(), Some("sample.txt"));
+    }
+
+    #[test]
+    fn parses_emacs_subcommand_with_file() {
+        let cli = Cli::try_parse_from(["nestvim", "emacs", "sample.txt"])
+            .expect("emacs subcommand with file should parse");
+        let (keymap, file) = resolve_cli(cli);
+        assert_eq!(keymap, Keymap::Emacs);
+        assert_eq!(file.as_deref(), Some("sample.txt"));
+    }
+
+    #[test]
+    fn parses_top_level_file_as_default_vim() {
+        let cli = Cli::try_parse_from(["nestvim", "sample.txt"])
+            .expect("top-level file argument should parse");
+        let (keymap, file) = resolve_cli(cli);
+        assert_eq!(keymap, Keymap::Vim);
+        assert_eq!(file.as_deref(), Some("sample.txt"));
+    }
+
+    #[test]
+    fn honors_parent_file_when_mode_subcommand_is_present() {
+        let cli = Cli::try_parse_from(["nestvim", "sample.txt", "emacs"])
+            .expect("parent file before mode subcommand should parse");
+        let (keymap, file) = resolve_cli(cli);
+        assert_eq!(keymap, Keymap::Emacs);
+        assert_eq!(file.as_deref(), Some("sample.txt"));
+    }
+
+    #[test]
+    fn prefers_subcommand_file_over_parent_file() {
+        let cli = Cli::try_parse_from(["nestvim", "parent.txt", "vim", "child.txt"])
+            .expect("subcommand file should parse");
+        let (keymap, file) = resolve_cli(cli);
+        assert_eq!(keymap, Keymap::Vim);
+        assert_eq!(file.as_deref(), Some("child.txt"));
+    }
+
+    #[test]
+    fn rejects_unknown_mode_subcommand() {
+        let result = Cli::try_parse_from(["nestvim", "invalid-mode"]);
+        assert!(result.is_err());
+    }
 }

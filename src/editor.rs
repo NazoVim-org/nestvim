@@ -1,47 +1,55 @@
 use crate::buffer::TextBuffer;
 use crate::highlight::Highlighter;
+use crate::keymap::create_keymap;
+use crate::keymap::KeymapHandler;
 use crate::plugin::PluginManager;
 use crate::register::Register;
 use crate::renderer::Renderer;
 use crate::terminal::Terminal;
 use crate::types::{
-    ConfirmAction, EditorState, Mode, PluginEvent, SearchDirection, SearchResult, VisualType,
+    ConfirmAction, EditorState, Keymap, Mode, PluginEvent, SearchDirection, SearchResult,
+    VisualType,
 };
 use crate::undo::UndoManager;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind, KeyModifiers};
 use futures::StreamExt;
+use std::cell::RefCell;
 use std::io;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 pub struct Editor {
-    terminal: Terminal,
-    buffer: TextBuffer,
-    highlighter: Highlighter,
-    renderer: Renderer,
-    plugin_manager: PluginManager,
-    register: Register,
-    undo_manager: UndoManager,
-    state: EditorState,
-    running: bool,
-    last_highlight_mod_count: usize,
-    last_keypress_time: Instant,
-    needs_render: bool,
-    pending_operator: Option<char>,
-    pending_register: Option<char>,
-    pending_mark: Option<char>,
-    pending_macro_play: Option<char>,
-    search_query: String,
-    search_direction: SearchDirection,
-    search_results: Vec<SearchResult>,
-    current_search_idx: usize,
-    dot_last_action: Option<DotAction>,
-    replace_char: Option<char>,
-    last_fchar: Option<char>,
-    last_fchar_till: bool,
+    pub(crate) terminal: Terminal,
+    pub(crate) buffer: TextBuffer,
+    pub(crate) highlighter: Highlighter,
+    pub(crate) renderer: Renderer,
+    pub(crate) plugin_manager: PluginManager,
+    pub(crate) register: Register,
+    pub(crate) undo_manager: UndoManager,
+    pub(crate) state: EditorState,
+    pub(crate) running: bool,
+    pub(crate) last_highlight_mod_count: usize,
+    pub(crate) last_keypress_time: Instant,
+    pub(crate) needs_render: bool,
+    pub(crate) pending_operator: Option<char>,
+    pub(crate) pending_register: Option<char>,
+    pub(crate) pending_mark: Option<char>,
+    pub(crate) pending_macro_play: Option<char>,
+    pub(crate) search_query: String,
+    pub(crate) search_direction: SearchDirection,
+    pub(crate) search_results: Vec<SearchResult>,
+    pub(crate) current_search_idx: usize,
+    pub(crate) dot_last_action: Option<DotAction>,
+    pub(crate) replace_char: Option<char>,
+    pub(crate) last_fchar: Option<char>,
+    pub(crate) last_fchar_till: bool,
+    pub(crate) keymap: Keymap,
+    pub(crate) keymap_handler: Rc<RefCell<dyn KeymapHandler>>,
+    pub(crate) pending_save: bool,
 }
 
 #[derive(Clone)]
-enum DotAction {
+pub(crate) enum DotAction {
     Insert {
         text: String,
     },
@@ -58,8 +66,67 @@ enum DotAction {
 }
 
 impl Editor {
-    pub async fn new(file_path: Option<&str>) -> Result<Self, Box<dyn std::error::Error>> {
-        let mut terminal = Terminal::new()?;
+    pub fn new_headless_for_test(keymap: Keymap) -> Result<Self, Box<dyn std::error::Error>> {
+        let terminal = Terminal::new()?;
+        let buffer = TextBuffer::new();
+        let highlighter = Highlighter::new();
+        let plugin_manager = PluginManager::new();
+        let renderer = Renderer::new();
+        let register = Register::new();
+        let undo_manager = UndoManager::new();
+        let state = EditorState {
+            mode: Mode::Normal,
+            cursor: crate::types::Position { line: 1, col: 0 },
+            file_path: None,
+            dirty: false,
+            command_buffer: String::new(),
+            visual_start: None,
+            visual_type: None,
+            marks: crate::types::Marks::new(),
+            macros: crate::types::Macros::new(),
+            confirmation_prompt: None,
+            show_line_numbers: true,
+        };
+
+        Ok(Self {
+            terminal,
+            buffer,
+            highlighter,
+            renderer,
+            plugin_manager,
+            register,
+            undo_manager,
+            state,
+            running: false,
+            last_highlight_mod_count: 0,
+            last_keypress_time: Instant::now(),
+            needs_render: true,
+            pending_operator: None,
+            pending_register: None,
+            pending_mark: None,
+            pending_macro_play: None,
+            search_query: String::new(),
+            search_direction: SearchDirection::Forward,
+            search_results: Vec::new(),
+            current_search_idx: 0,
+            dot_last_action: None,
+            replace_char: None,
+            last_fchar: None,
+            last_fchar_till: false,
+            keymap,
+            keymap_handler: create_keymap(keymap),
+            pending_save: false,
+        })
+    }
+
+  pub async fn new(
+        file_path: Option<&str>,
+        keymap: Keymap,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+
+        // 既存のまま
+      
+      let mut terminal = Terminal::new()?;
 
         terminal.enable_raw_mode()?;
 
@@ -130,6 +197,9 @@ impl Editor {
             replace_char: None,
             last_fchar: None,
             last_fchar_till: false,
+            keymap,
+            keymap_handler: create_keymap(keymap),
+            pending_save: false,
         })
     }
 
@@ -148,6 +218,8 @@ impl Editor {
 
         while self.running {
             self.state.dirty = self.buffer.dirty;
+
+            self.consume_pending_save().await;
 
             tokio::select! {
                 Some(event) = reader.next() => {
@@ -192,6 +264,13 @@ impl Editor {
     }
 
     async fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
+        let editor_ptr = self as *mut Editor;
+        self.keymap_handler
+            .borrow_mut()
+            .handle_key(editor_ptr, key, modifiers);
+    }
+
+  pub(crate) fn vim_on_key_event(&mut self, key: KeyCode) {
         if let KeyCode::Char(c) = key {
             self.plugin_manager.emit(PluginEvent::Key {
                 mode: self.state.mode,
@@ -203,51 +282,9 @@ impl Editor {
                 self.state.macros.add_key(key_str);
             }
         }
-
-        if modifiers.contains(KeyModifiers::CONTROL) {
-            match self.state.mode {
-                Mode::Normal | Mode::Insert | Mode::Replace => match key {
-                    KeyCode::Char('d') => {
-                        self.scroll_by(self.terminal.rows() as usize / 2);
-                        self.needs_render = true;
-                        return;
-                    }
-                    KeyCode::Char('u') => {
-                        self.scroll_by(self.terminal.rows() as usize / 2);
-                        self.needs_render = true;
-                        return;
-                    }
-                    KeyCode::Char('y') => {
-                        self.scroll_up_one();
-                        self.needs_render = true;
-                        return;
-                    }
-                    KeyCode::Char('e') => {
-                        self.scroll_down_one();
-                        self.needs_render = true;
-                        return;
-                    }
-                    KeyCode::Char('g') => {
-                        self.show_file_info();
-                        self.needs_render = true;
-                        return;
-                    }
-                    _ => {}
-                },
-                _ => {}
-            }
-        }
-
-        match self.state.mode {
-            Mode::Normal => self.handle_normal(key).await,
-            Mode::Insert => self.handle_insert(key).await,
-            Mode::Command => self.handle_command(key).await,
-            Mode::Visual => self.handle_visual(key).await,
-            Mode::Replace => self.handle_replace(key).await,
-        }
     }
 
-    async fn handle_normal(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_normal(&mut self, key: KeyCode) {
         let line_count = self.buffer.line_count();
 
         if let Some(op) = self.pending_operator {
@@ -774,8 +811,7 @@ impl Editor {
                         start + word.len(),
                     );
                     self.register.set(register, &content);
-                    let char_start =
-                        self.buffer.line_to_char(self.state.cursor.line - 1) + start;
+                    let char_start = self.buffer.line_to_char(self.state.cursor.line - 1) + start;
                     let char_end = char_start + word.len();
                     self.buffer.remove_range(char_start, char_end);
                 }
@@ -852,7 +888,8 @@ impl Editor {
                                 break;
                             }
                         }
-                        let char_start = self.buffer.line_to_char(self.state.cursor.line - 1) + aw_start;
+                        let char_start =
+                            self.buffer.line_to_char(self.state.cursor.line - 1) + aw_start;
                         let char_end = char_start + (aw_end - aw_start);
                         let content = self.buffer.get_char_range(
                             self.state.cursor.line,
@@ -915,8 +952,13 @@ impl Editor {
                     (start, end + 1)
                 };
 
-                let content: String = line.chars().skip(content_start).take(content_end - content_start).collect();
-                let char_start = self.buffer.line_to_char(self.state.cursor.line - 1) + content_start;
+                let content: String = line
+                    .chars()
+                    .skip(content_start)
+                    .take(content_end - content_start)
+                    .collect();
+                let char_start =
+                    self.buffer.line_to_char(self.state.cursor.line - 1) + content_start;
                 let char_end = char_start + content.len();
 
                 self.register.set(register, &content);
@@ -984,15 +1026,34 @@ impl Editor {
                 let mut content = String::new();
                 if open_line == close_line {
                     let line_str = self.buffer.get_line(open_line);
-                    content = line_str.chars().skip(content_start).take(content_end - content_start).collect();
+                    content = line_str
+                        .chars()
+                        .skip(content_start)
+                        .take(content_end - content_start)
+                        .collect();
                 } else {
-                    content.push_str(&self.buffer.get_line(open_line).chars().skip(content_start).take(usize::MAX).collect::<String>());
+                    content.push_str(
+                        &self
+                            .buffer
+                            .get_line(open_line)
+                            .chars()
+                            .skip(content_start)
+                            .take(usize::MAX)
+                            .collect::<String>(),
+                    );
                     content.push('\n');
                     for l in (open_line + 1)..close_line {
                         content.push_str(&self.buffer.get_line(l));
                         content.push('\n');
                     }
-                    content.push_str(&self.buffer.get_line(close_line).chars().take(content_end).collect::<String>());
+                    content.push_str(
+                        &self
+                            .buffer
+                            .get_line(close_line)
+                            .chars()
+                            .take(content_end)
+                            .collect::<String>(),
+                    );
                 }
 
                 self.register.set(register, &content);
@@ -1124,7 +1185,7 @@ impl Editor {
         self.on_buffer_modified();
     }
 
-    async fn handle_visual(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_visual(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
                 let prev_mode = self.state.mode;
@@ -1268,16 +1329,11 @@ impl Editor {
         self.buffer.line_to_char(line_idx)
     }
 
-    async fn handle_insert(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_insert(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
-                let prev_mode = self.state.mode;
-                self.state.mode = Mode::Normal;
+                self.transition_mode(Mode::Normal);
                 self.state.cursor.col = self.state.cursor.col.saturating_sub(1);
-                self.plugin_manager.emit(PluginEvent::ModeChange {
-                    from: prev_mode,
-                    to: Mode::Normal,
-                });
                 self.needs_render = true;
             }
             KeyCode::Backspace => {
@@ -1315,7 +1371,14 @@ impl Editor {
         self.needs_render = true;
     }
 
-    fn undo(&mut self) {
+    pub(crate) fn transition_mode(&mut self, to: Mode) {
+        let from = self.state.mode;
+        self.state.mode = to;
+        self.plugin_manager
+            .emit(PluginEvent::ModeChange { from, to });
+    }
+
+    pub(crate) fn undo(&mut self) {
         if let Some(edit) = self.undo_manager.undo(&mut self.buffer) {
             self.state.cursor = edit.cursor_before;
             self.needs_render = true;
@@ -1323,7 +1386,7 @@ impl Editor {
     }
 
     #[allow(dead_code)]
-    fn redo(&mut self) {
+    pub(crate) fn redo(&mut self) {
         if let Some(edit) = self.undo_manager.redo(&mut self.buffer) {
             self.state.cursor = edit.cursor_after;
             self.needs_render = true;
@@ -1483,7 +1546,7 @@ impl Editor {
         self.needs_render = true;
     }
 
-    async fn handle_command(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_command(&mut self, key: KeyCode) {
         if self.state.has_confirmation() {
             self.handle_confirmation(key).await;
             return;
@@ -1496,7 +1559,7 @@ impl Editor {
 
                 match cmd.as_str() {
                     "q" => {
-                        self.handle_quit().await;
+                        self.handle_quit();
                     }
                     "q!" => {
                         self.running = false;
@@ -1572,23 +1635,13 @@ impl Editor {
                 }
 
                 if !self.state.has_confirmation() {
-                    let prev_mode = self.state.mode;
-                    self.state.mode = Mode::Normal;
-                    self.plugin_manager.emit(PluginEvent::ModeChange {
-                        from: prev_mode,
-                        to: Mode::Normal,
-                    });
+                    self.transition_mode(Mode::Normal);
                     self.needs_render = true;
                 }
             }
             KeyCode::Esc => {
                 self.state.command_buffer.clear();
-                let prev_mode = self.state.mode;
-                self.state.mode = Mode::Normal;
-                self.plugin_manager.emit(PluginEvent::ModeChange {
-                    from: prev_mode,
-                    to: Mode::Normal,
-                });
+                self.transition_mode(Mode::Normal);
                 self.needs_render = true;
             }
             KeyCode::Backspace => {
@@ -1603,7 +1656,7 @@ impl Editor {
         }
     }
 
-    async fn handle_quit(&mut self) {
+    pub fn handle_quit(&mut self) {
         if self.buffer.dirty {
             self.state.set_confirmation(
                 "No write since last change. Quit anyway? (y/n Enter/Esc: yes, n: no)".to_string(),
@@ -1680,10 +1733,7 @@ impl Editor {
     }
 
     async fn handle_write_path(&mut self, cmd: &str) {
-        let path_str = cmd
-            .trim_start_matches("w!")
-            .trim_start_matches("w ")
-            .trim();
+        let path_str = cmd.trim_start_matches("w!").trim_start_matches("w ").trim();
         if path_str.is_empty() {
             eprintln!("[editor] Expected filename after 'w'");
             return;
@@ -1745,16 +1795,11 @@ impl Editor {
         }
     }
 
-    async fn handle_replace(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_replace(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
-                let prev_mode = self.state.mode;
-                self.state.mode = Mode::Normal;
+                self.transition_mode(Mode::Normal);
                 self.replace_char = None;
-                self.plugin_manager.emit(PluginEvent::ModeChange {
-                    from: prev_mode,
-                    to: Mode::Normal,
-                });
                 self.needs_render = true;
             }
             KeyCode::Char(c) => {
@@ -1803,7 +1848,7 @@ impl Editor {
         self.state.cursor.col = self.state.cursor.col.min(len.saturating_sub(1));
     }
 
-    fn scroll_by(&mut self, lines: usize) {
+    pub(crate) fn scroll_by(&mut self, lines: usize) {
         if self.state.cursor.line > lines {
             self.state.cursor.line -= lines;
         } else {
@@ -2041,7 +2086,7 @@ impl Editor {
         self.on_buffer_modified();
     }
 
-    fn scroll_cursor_to_center(&mut self) {
+    pub fn scroll_cursor_to_center(&mut self) {
         let terminal_rows = self.terminal.rows() as usize;
         let visible_rows = terminal_rows.saturating_sub(2);
         let scroll_pos = self.state.cursor.line.saturating_sub(visible_rows / 2);
@@ -2064,7 +2109,7 @@ impl Editor {
         self.state.show_line_numbers = !self.state.show_line_numbers;
     }
 
-    fn scroll_up_one(&mut self) {
+    pub fn scroll_up_one(&mut self) {
         if self.state.cursor.line > 1 {
             self.state.cursor.line -= 1;
         }
@@ -2088,5 +2133,364 @@ impl Editor {
             .map(|p| p.to_str().unwrap_or(""))
             .unwrap_or("[No Name]");
         eprintln!("\"{}\" {} lines, {} characters", path, line_count, total);
+    }
+
+    pub(crate) fn cursor_right(&mut self, n: usize) {
+        let line_len = self.buffer.get_line(self.state.cursor.line).len();
+        self.state.cursor.col = (self.state.cursor.col + n).min(line_len.saturating_sub(1));
+        self.needs_render = true;
+    }
+
+    pub(crate) fn cursor_left(&mut self, n: usize) {
+        self.state.cursor.col = self.state.cursor.col.saturating_sub(n);
+        self.needs_render = true;
+    }
+
+    pub(crate) fn cursor_down(&mut self, n: usize) {
+        let line_count = self.buffer.line_count();
+        self.state.cursor.line = (self.state.cursor.line + n).min(line_count);
+        let len = self.buffer.get_line(self.state.cursor.line).len();
+        self.state.cursor.col = self.state.cursor.col.min(len.saturating_sub(1));
+        self.needs_render = true;
+    }
+
+    pub(crate) fn cursor_up(&mut self, n: usize) {
+        self.state.cursor.line = self.state.cursor.line.saturating_sub(n).max(1);
+        let len = self.buffer.get_line(self.state.cursor.line).len();
+        self.state.cursor.col = self.state.cursor.col.min(len.saturating_sub(1));
+        self.needs_render = true;
+    }
+
+    pub(crate) fn cursor_line_start(&mut self) {
+        self.state.cursor.col = 0;
+        self.needs_render = true;
+    }
+
+    pub(crate) fn cursor_line_end(&mut self) {
+        let line = self.buffer.get_line(self.state.cursor.line);
+        self.state.cursor.col = line.len().saturating_sub(1);
+        self.needs_render = true;
+    }
+
+    pub(crate) fn delete_char_forward(&mut self) {
+        let line = self.buffer.get_line(self.state.cursor.line);
+        if self.state.cursor.col < line.len() {
+            self.buffer
+                .delete(self.state.cursor.line, self.state.cursor.col);
+            self.state.dirty = true;
+            self.needs_render = true;
+        }
+    }
+
+    pub(crate) fn kill_line(&mut self) {
+        let line = self.buffer.get_line(self.state.cursor.line);
+        if self.state.cursor.col < line.len() {
+            let end_col = line.len();
+            self.buffer.delete_range(
+                self.state.cursor.line,
+                self.state.cursor.col,
+                self.state.cursor.line,
+                end_col,
+            );
+            self.state.dirty = true;
+            self.needs_render = true;
+        }
+    }
+
+    pub(crate) fn insert_char(&mut self, c: char) {
+        self.buffer
+            .insert_char(self.state.cursor.line, self.state.cursor.col, c);
+        self.state.cursor.col += 1;
+        self.state.dirty = true;
+        self.needs_render = true;
+    }
+
+    pub(crate) fn delete_char_backward(&mut self) {
+        if self.state.cursor.col > 0 {
+            self.buffer
+                .delete(self.state.cursor.line, self.state.cursor.col - 1);
+            self.state.cursor.col -= 1;
+            self.state.dirty = true;
+            self.needs_render = true;
+        } else if self.state.cursor.line > 1 {
+            let merged = self.buffer.get_line(self.state.cursor.line - 1);
+            let prev_len = merged.len();
+            self.buffer.merge_with_prev_line(self.state.cursor.line);
+            self.state.cursor.line -= 1;
+            self.state.cursor.col = prev_len.saturating_sub(1);
+            self.state.dirty = true;
+            self.needs_render = true;
+        }
+    }
+
+    pub(crate) fn insert_newline(&mut self) {
+        let line = self.buffer.get_line(self.state.cursor.line);
+        let (_, after) = line.split_at(self.state.cursor.col);
+        self.buffer
+            .insert(self.state.cursor.line, self.state.cursor.col, "\n");
+        if !after.is_empty() {
+            self.buffer.insert(self.state.cursor.line + 1, 0, after);
+        }
+        self.state.cursor.line += 1;
+        self.state.cursor.col = 0;
+        self.state.dirty = true;
+        self.needs_render = true;
+    }
+
+    pub fn kill_word(&mut self) {
+        let (_, _, end_col) = self
+            .buffer
+            .get_word_range(self.state.cursor.line, self.state.cursor.col);
+        if end_col > self.state.cursor.col {
+            self.buffer.delete_range(
+                self.state.cursor.line,
+                self.state.cursor.col,
+                self.state.cursor.line,
+                end_col,
+            );
+            self.state.dirty = true;
+            self.needs_render = true;
+        } else if self.state.cursor.line < self.buffer.line_count() {
+            self.buffer.delete_range(
+                self.state.cursor.line,
+                self.state.cursor.col,
+                self.state.cursor.line + 1,
+                0,
+            );
+            self.state.dirty = true;
+            self.needs_render = true;
+        }
+    }
+
+    pub fn yank_pop(&mut self) {
+        self.undo();
+    }
+
+    pub fn transpose_chars(&mut self) {
+        let line = self.state.cursor.line;
+        let col = self.state.cursor.col;
+
+        if col > 0 {
+            let char1 = self.buffer.get_line(line).chars().nth(col - 1);
+            let char2 = self.buffer.get_line(line).chars().nth(col);
+
+            if let (Some(c1), Some(c2)) = (char1, char2) {
+                self.buffer.delete(line, col);
+                self.buffer.delete(line, col - 1);
+                self.buffer.insert_char(line, col - 2, c2);
+                self.buffer.insert_char(line, col - 1, c1);
+                self.state.cursor.col = (col + 1).min(self.buffer.get_line(line).len());
+                self.state.dirty = true;
+                self.needs_render = true;
+            }
+        }
+    }
+
+    pub fn insert_tab(&mut self) {
+        self.buffer
+            .insert_char(self.state.cursor.line, self.state.cursor.col, '\t');
+        self.state.cursor.col += 1;
+        self.state.dirty = true;
+        self.needs_render = true;
+    }
+
+    pub fn scroll_up(&mut self) {
+        let rows = self.terminal.rows() as usize;
+        self.scroll_by(rows);
+        self.needs_render = true;
+    }
+
+    pub fn scroll_down(&mut self) {
+        let rows = self.terminal.rows() as usize;
+        self.scroll_by(rows.saturating_sub(1));
+        self.needs_render = true;
+    }
+
+    pub fn clear_screen(&mut self) {
+        let _ = self.terminal.clear_screen();
+        self.needs_render = true;
+    }
+
+    pub fn abort(&mut self) {
+        self.state.command_buffer.clear();
+        if self.state.mode == Mode::Command {
+            self.state.mode = Mode::Normal;
+            self.needs_render = true;
+        }
+    }
+
+    pub async fn consume_pending_save(&mut self) {
+        if self.pending_save {
+            self.pending_save = false;
+            self.save_file_async().await;
+        }
+    }
+
+    pub async fn save_file_async(&mut self) {
+        if let Err(e) = self.buffer.save_file().await {
+            eprintln!("[editor] Save failed: {}", e);
+        } else {
+            self.state.dirty = false;
+        }
+        self.needs_render = true;
+    }
+
+    pub fn quit(&mut self) {
+        self.running = false;
+    }
+
+    pub fn set_buffer_for_test(&mut self, text: &str) {
+        self.buffer = TextBuffer::new();
+        for ch in text.chars() {
+            if ch == '\n' {
+                self.buffer
+                    .insert_newline(self.state.cursor.line, self.state.cursor.col);
+                self.state.cursor.line += 1;
+                self.state.cursor.col = 0;
+            } else {
+                self.buffer
+                    .insert_char(self.state.cursor.line, self.state.cursor.col, ch);
+                self.state.cursor.col += 1;
+            }
+        }
+        self.state.cursor.line = 1;
+        self.state.cursor.col = 0;
+        self.state.mode = Mode::Normal;
+    }
+
+    pub fn snapshot_for_test(&self) -> (String, usize, usize, Mode) {
+        (
+            self.buffer.to_string(),
+            self.state.cursor.line,
+            self.state.cursor.col,
+            self.state.mode,
+        )
+    }
+
+    pub async fn handle_key_for_test(&mut self, key: KeyCode, modifiers: KeyModifiers) {
+        self.handle_key(key, modifiers).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::Keymap;
+    use crossterm::event::{KeyCode, KeyModifiers};
+
+    fn test_editor(keymap: Keymap) -> Editor {
+        let terminal = Terminal::new().expect("terminal");
+        let buffer = TextBuffer::new();
+        let highlighter = Highlighter::new();
+        let renderer = Renderer::new();
+        let plugin_manager = PluginManager::new();
+        let register = Register::new();
+        let undo_manager = UndoManager::new();
+        let state = EditorState {
+            mode: Mode::Normal,
+            cursor: crate::types::Position { line: 1, col: 0 },
+            file_path: None,
+            dirty: false,
+            command_buffer: String::new(),
+            visual_start: None,
+            visual_type: None,
+            marks: crate::types::Marks::new(),
+            macros: crate::types::Macros::new(),
+            confirmation_prompt: None,
+            show_line_numbers: true,
+        };
+
+        Editor {
+            terminal,
+            buffer,
+            highlighter,
+            renderer,
+            plugin_manager,
+            register,
+            undo_manager,
+            state,
+            running: true,
+            last_highlight_mod_count: 0,
+            last_keypress_time: Instant::now(),
+            needs_render: false,
+            pending_operator: None,
+            pending_register: None,
+            pending_mark: None,
+            pending_macro_play: None,
+            search_query: String::new(),
+            search_direction: SearchDirection::Forward,
+            search_results: Vec::new(),
+            current_search_idx: 0,
+            dot_last_action: None,
+            replace_char: None,
+            last_fchar: None,
+            last_fchar_till: false,
+            keymap,
+            keymap_handler: create_keymap(keymap),
+            pending_save: false,
+        }
+    }
+
+    #[test]
+    fn dirty_quit_confirmation_message_matches_expected() {
+        let mut editor = test_editor(Keymap::Vim);
+        editor.buffer.dirty = true;
+
+        editor.handle_quit();
+
+        let prompt = editor
+            .state
+            .confirmation_prompt
+            .as_ref()
+            .expect("prompt should exist");
+        assert_eq!(
+            prompt.message,
+            "No write since last change. Quit anyway? (y/n Enter/Esc: yes, n: no)"
+        );
+        assert_eq!(prompt.action, ConfirmAction::Quit);
+    }
+
+    #[test]
+    fn emacs_quit_uses_same_dirty_confirmation_flow_as_vim() {
+        let mut editor = test_editor(Keymap::Emacs);
+        editor.buffer.dirty = true;
+
+        editor.handle_quit();
+
+        assert!(editor.state.has_confirmation());
+        let prompt = editor.state.confirmation_prompt.as_ref().unwrap();
+        assert_eq!(prompt.action, ConfirmAction::Quit);
+    }
+
+    #[tokio::test]
+    async fn consume_pending_save_clears_flag_after_attempt() {
+        let mut editor = test_editor(Keymap::Emacs);
+        editor.pending_save = true;
+        editor.buffer.dirty = true;
+
+        editor.consume_pending_save().await;
+
+        assert!(!editor.pending_save);
+        assert!(editor.needs_render);
+    }
+
+    #[test]
+    fn emacs_ctrl_x_ctrl_c_triggers_same_quit_path() {
+        let mut editor = test_editor(Keymap::Emacs);
+        editor.buffer.dirty = true;
+
+        editor.keymap_handler.borrow_mut().handle_key(
+            &mut editor as *mut Editor,
+            KeyCode::Char('x'),
+            KeyModifiers::CONTROL,
+        );
+        editor.keymap_handler.borrow_mut().handle_key(
+            &mut editor as *mut Editor,
+            KeyCode::Char('c'),
+            KeyModifiers::CONTROL,
+        );
+
+        assert!(editor.state.has_confirmation());
+        assert!(editor.running);
     }
 }

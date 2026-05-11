@@ -1,17 +1,6 @@
-mod buffer;
-mod editor;
-mod highlight;
-mod keymap;
-mod plugin;
-mod register;
-mod renderer;
-mod terminal;
-mod types;
-mod undo;
-
-use crate::editor::Editor;
-use crate::types::Keymap;
 use clap::{Parser, Subcommand};
+use nestvim::editor::Editor;
+use nestvim::types::Keymap;
 
 #[derive(Parser)]
 #[command(name = "nestvim")]
@@ -121,6 +110,15 @@ mod tests {
         let (keymap, file) = resolve_cli(cli);
         assert_eq!(keymap, Keymap::Emacs);
         assert_eq!(file.as_deref(), Some("sample.txt"));
+    }
+
+    #[test]
+    fn prefers_subcommand_file_over_parent_file() {
+        let cli = Cli::try_parse_from(["nestvim", "parent.txt", "vim", "child.txt"])
+            .expect("subcommand file should parse");
+        let (keymap, file) = resolve_cli(cli);
+        assert_eq!(keymap, Keymap::Vim);
+        assert_eq!(file.as_deref(), Some("child.txt"));
     }
 
     #[test]

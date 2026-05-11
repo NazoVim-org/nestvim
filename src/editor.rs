@@ -66,10 +66,65 @@ pub(crate) enum DotAction {
 }
 
 impl Editor {
-    pub async fn new(
+    pub fn new_headless_for_test(keymap: Keymap) -> Result<Self, Box<dyn std::error::Error>> {
+        let terminal = Terminal::new()?;
+        let buffer = TextBuffer::new();
+        let highlighter = Highlighter::new();
+        let plugin_manager = PluginManager::new();
+        let renderer = Renderer::new();
+        let register = Register::new();
+        let undo_manager = UndoManager::new();
+        let state = EditorState {
+            mode: Mode::Normal,
+            cursor: crate::types::Position { line: 1, col: 0 },
+            file_path: None,
+            dirty: false,
+            command_buffer: String::new(),
+            visual_start: None,
+            visual_type: None,
+            marks: crate::types::Marks::new(),
+            macros: crate::types::Macros::new(),
+            confirmation_prompt: None,
+            show_line_numbers: true,
+        };
+
+        Ok(Self {
+            terminal,
+            buffer,
+            highlighter,
+            renderer,
+            plugin_manager,
+            register,
+            undo_manager,
+            state,
+            running: false,
+            last_highlight_mod_count: 0,
+            last_keypress_time: Instant::now(),
+            needs_render: true,
+            pending_operator: None,
+            pending_register: None,
+            pending_mark: None,
+            pending_macro_play: None,
+            search_query: String::new(),
+            search_direction: SearchDirection::Forward,
+            search_results: Vec::new(),
+            current_search_idx: 0,
+            dot_last_action: None,
+            replace_char: None,
+            last_fchar: None,
+            last_fchar_till: false,
+            keymap,
+            keymap_handler: create_keymap(keymap),
+            pending_save: false,
+        })
+    }
+
+  pub async fn new(
         file_path: Option<&str>,
         keymap: Keymap,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+
+        // 既存のまま
         let mut terminal = Terminal::new()?;
 
         terminal.enable_raw_mode()?;
@@ -217,7 +272,7 @@ impl Editor {
             .handle_key(editor_ptr, key, modifiers);
     }
 
-    pub(crate) fn vim_on_key_event(&mut self, key: KeyCode) {
+  pub(crate) fn vim_on_key_event(&mut self, key: KeyCode) {
         if let KeyCode::Char(c) = key {
             self.plugin_manager.emit(PluginEvent::Key {
                 mode: self.state.mode,
@@ -1279,13 +1334,8 @@ impl Editor {
     pub(crate) async fn handle_insert(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
-                let prev_mode = self.state.mode;
-                self.state.mode = Mode::Normal;
+                self.transition_mode(Mode::Normal);
                 self.state.cursor.col = self.state.cursor.col.saturating_sub(1);
-                self.plugin_manager.emit(PluginEvent::ModeChange {
-                    from: prev_mode,
-                    to: Mode::Normal,
-                });
                 self.needs_render = true;
             }
             KeyCode::Backspace => {
@@ -1587,23 +1637,13 @@ impl Editor {
                 }
 
                 if !self.state.has_confirmation() {
-                    let prev_mode = self.state.mode;
-                    self.state.mode = Mode::Normal;
-                    self.plugin_manager.emit(PluginEvent::ModeChange {
-                        from: prev_mode,
-                        to: Mode::Normal,
-                    });
+                    self.transition_mode(Mode::Normal);
                     self.needs_render = true;
                 }
             }
             KeyCode::Esc => {
                 self.state.command_buffer.clear();
-                let prev_mode = self.state.mode;
-                self.state.mode = Mode::Normal;
-                self.plugin_manager.emit(PluginEvent::ModeChange {
-                    from: prev_mode,
-                    to: Mode::Normal,
-                });
+                self.transition_mode(Mode::Normal);
                 self.needs_render = true;
             }
             KeyCode::Backspace => {
@@ -1760,13 +1800,8 @@ impl Editor {
     pub(crate) async fn handle_replace(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
-                let prev_mode = self.state.mode;
-                self.state.mode = Mode::Normal;
+                self.transition_mode(Mode::Normal);
                 self.replace_char = None;
-                self.plugin_manager.emit(PluginEvent::ModeChange {
-                    from: prev_mode,
-                    to: Mode::Normal,
-                });
                 self.needs_render = true;
             }
             KeyCode::Char(c) => {
@@ -2297,5 +2332,37 @@ impl Editor {
 
     pub fn quit(&mut self) {
         self.running = false;
+    }
+
+    pub fn set_buffer_for_test(&mut self, text: &str) {
+        self.buffer = TextBuffer::new();
+        for ch in text.chars() {
+            if ch == '\n' {
+                self.buffer
+                    .insert_newline(self.state.cursor.line, self.state.cursor.col);
+                self.state.cursor.line += 1;
+                self.state.cursor.col = 0;
+            } else {
+                self.buffer
+                    .insert_char(self.state.cursor.line, self.state.cursor.col, ch);
+                self.state.cursor.col += 1;
+            }
+        }
+        self.state.cursor.line = 1;
+        self.state.cursor.col = 0;
+        self.state.mode = Mode::Normal;
+    }
+
+    pub fn snapshot_for_test(&self) -> (String, usize, usize, Mode) {
+        (
+            self.buffer.to_string(),
+            self.state.cursor.line,
+            self.state.cursor.col,
+            self.state.mode,
+        )
+    }
+
+    pub async fn handle_key_for_test(&mut self, key: KeyCode, modifiers: KeyModifiers) {
+        self.handle_key(key, modifiers).await;
     }
 }

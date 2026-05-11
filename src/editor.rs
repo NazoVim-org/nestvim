@@ -43,7 +43,6 @@ pub struct Editor {
     pub(crate) replace_char: Option<char>,
     pub(crate) last_fchar: Option<char>,
     pub(crate) last_fchar_till: bool,
-    pub(crate) keymap: Keymap,
     pub(crate) keymap_handler: Rc<RefCell<dyn KeymapHandler>>,
     pub(crate) pending_save: bool,
 }
@@ -113,7 +112,6 @@ impl Editor {
             replace_char: None,
             last_fchar: None,
             last_fchar_till: false,
-            keymap,
             keymap_handler: create_keymap(keymap),
             pending_save: false,
         })
@@ -196,7 +194,6 @@ impl Editor {
             replace_char: None,
             last_fchar: None,
             last_fchar_till: false,
-            keymap,
             keymap_handler: create_keymap(keymap),
             pending_save: false,
         })
@@ -263,10 +260,11 @@ impl Editor {
     }
 
     async fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
-        let editor_ptr = self as *mut Editor;
-        self.keymap_handler
+        let keymap_handler = Rc::clone(&self.keymap_handler);
+        keymap_handler
             .borrow_mut()
-            .handle_key(editor_ptr, key, modifiers);
+            .handle_key(self, key, modifiers)
+            .await;
     }
 
     pub(crate) fn vim_on_key_event(&mut self, key: KeyCode) {
@@ -2424,7 +2422,6 @@ mod tests {
             replace_char: None,
             last_fchar: None,
             last_fchar_till: false,
-            keymap,
             keymap_handler: create_keymap(keymap),
             pending_save: false,
         }
@@ -2446,7 +2443,7 @@ mod tests {
             prompt.message,
             "No write since last change. Quit anyway? (y/n Enter/Esc: yes, n: no)"
         );
-        assert_eq!(prompt.action, ConfirmAction::Quit);
+        assert!(matches!(prompt.action, ConfirmAction::Quit));
     }
 
     #[test]
@@ -2458,7 +2455,7 @@ mod tests {
 
         assert!(editor.state.has_confirmation());
         let prompt = editor.state.confirmation_prompt.as_ref().unwrap();
-        assert_eq!(prompt.action, ConfirmAction::Quit);
+        assert!(matches!(prompt.action, ConfirmAction::Quit));
     }
 
     #[tokio::test]
@@ -2473,21 +2470,17 @@ mod tests {
         assert!(editor.needs_render);
     }
 
-    #[test]
-    fn emacs_ctrl_x_ctrl_c_triggers_same_quit_path() {
+    #[tokio::test]
+    async fn emacs_ctrl_x_ctrl_c_triggers_same_quit_path() {
         let mut editor = test_editor(Keymap::Emacs);
         editor.buffer.dirty = true;
 
-        editor.keymap_handler.borrow_mut().handle_key(
-            &mut editor as *mut Editor,
-            KeyCode::Char('x'),
-            KeyModifiers::CONTROL,
-        );
-        editor.keymap_handler.borrow_mut().handle_key(
-            &mut editor as *mut Editor,
-            KeyCode::Char('c'),
-            KeyModifiers::CONTROL,
-        );
+        editor
+            .handle_key_for_test(KeyCode::Char('x'), KeyModifiers::CONTROL)
+            .await;
+        editor
+            .handle_key_for_test(KeyCode::Char('c'), KeyModifiers::CONTROL)
+            .await;
 
         assert!(editor.state.has_confirmation());
         assert!(editor.running);

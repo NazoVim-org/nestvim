@@ -7,14 +7,15 @@ use crate::register::Register;
 use crate::renderer::Renderer;
 use crate::terminal::Terminal;
 use crate::types::{
-    ConfirmAction, EditorState, Keymap, Mode, PluginEvent, SearchDirection, SearchResult, VisualType,
+    ConfirmAction, EditorState, Keymap, Mode, PluginEvent, SearchDirection, SearchResult,
+    VisualType,
 };
 use crate::undo::UndoManager;
-use std::cell::RefCell;
-use std::rc::Rc;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind, KeyModifiers};
 use futures::StreamExt;
+use std::cell::RefCell;
 use std::io;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 pub struct Editor {
@@ -65,7 +66,10 @@ pub(crate) enum DotAction {
 }
 
 impl Editor {
-    pub async fn new(file_path: Option<&str>, keymap: Keymap) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(
+        file_path: Option<&str>,
+        keymap: Keymap,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut terminal = Terminal::new()?;
 
         terminal.enable_raw_mode()?;
@@ -207,16 +211,13 @@ impl Editor {
     }
 
     async fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
-        if self.keymap == Keymap::Emacs {
-            let editor_ptr = self as *mut Editor;
-            self.keymap_handler.borrow_mut().handle_key(editor_ptr, key, modifiers);
-            return;
-        }
-
-        self.handle_key_vim(key, modifiers).await;
+        let editor_ptr = self as *mut Editor;
+        self.keymap_handler
+            .borrow_mut()
+            .handle_key(editor_ptr, key, modifiers);
     }
 
-    pub async fn handle_key_vim(&mut self, key: KeyCode, modifiers: KeyModifiers) {
+    pub(crate) fn vim_on_key_event(&mut self, key: KeyCode) {
         if let KeyCode::Char(c) = key {
             self.plugin_manager.emit(PluginEvent::Key {
                 mode: self.state.mode,
@@ -228,51 +229,9 @@ impl Editor {
                 self.state.macros.add_key(key_str);
             }
         }
-
-        if modifiers.contains(KeyModifiers::CONTROL) {
-            match self.state.mode {
-                Mode::Normal | Mode::Insert | Mode::Replace => match key {
-                    KeyCode::Char('d') => {
-                        self.scroll_by(self.terminal.rows() as usize / 2);
-                        self.needs_render = true;
-                        return;
-                    }
-                    KeyCode::Char('u') => {
-                        self.scroll_by(self.terminal.rows() as usize / 2);
-                        self.needs_render = true;
-                        return;
-                    }
-                    KeyCode::Char('y') => {
-                        self.scroll_up_one();
-                        self.needs_render = true;
-                        return;
-                    }
-                    KeyCode::Char('e') => {
-                        self.scroll_down_one();
-                        self.needs_render = true;
-                        return;
-                    }
-                    KeyCode::Char('g') => {
-                        self.show_file_info();
-                        self.needs_render = true;
-                        return;
-                    }
-                    _ => {}
-                },
-                _ => {}
-            }
-        }
-
-        match self.state.mode {
-            Mode::Normal => self.handle_normal(key).await,
-            Mode::Insert => self.handle_insert(key).await,
-            Mode::Command => self.handle_command(key).await,
-            Mode::Visual => self.handle_visual(key).await,
-            Mode::Replace => self.handle_replace(key).await,
-        }
     }
 
-    async fn handle_normal(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_normal(&mut self, key: KeyCode) {
         let line_count = self.buffer.line_count();
 
         if let Some(op) = self.pending_operator {
@@ -799,8 +758,7 @@ impl Editor {
                         start + word.len(),
                     );
                     self.register.set(register, &content);
-                    let char_start =
-                        self.buffer.line_to_char(self.state.cursor.line - 1) + start;
+                    let char_start = self.buffer.line_to_char(self.state.cursor.line - 1) + start;
                     let char_end = char_start + word.len();
                     self.buffer.remove_range(char_start, char_end);
                 }
@@ -877,7 +835,8 @@ impl Editor {
                                 break;
                             }
                         }
-                        let char_start = self.buffer.line_to_char(self.state.cursor.line - 1) + aw_start;
+                        let char_start =
+                            self.buffer.line_to_char(self.state.cursor.line - 1) + aw_start;
                         let char_end = char_start + (aw_end - aw_start);
                         let content = self.buffer.get_char_range(
                             self.state.cursor.line,
@@ -940,8 +899,13 @@ impl Editor {
                     (start, end + 1)
                 };
 
-                let content: String = line.chars().skip(content_start).take(content_end - content_start).collect();
-                let char_start = self.buffer.line_to_char(self.state.cursor.line - 1) + content_start;
+                let content: String = line
+                    .chars()
+                    .skip(content_start)
+                    .take(content_end - content_start)
+                    .collect();
+                let char_start =
+                    self.buffer.line_to_char(self.state.cursor.line - 1) + content_start;
                 let char_end = char_start + content.len();
 
                 self.register.set(register, &content);
@@ -1009,15 +973,34 @@ impl Editor {
                 let mut content = String::new();
                 if open_line == close_line {
                     let line_str = self.buffer.get_line(open_line);
-                    content = line_str.chars().skip(content_start).take(content_end - content_start).collect();
+                    content = line_str
+                        .chars()
+                        .skip(content_start)
+                        .take(content_end - content_start)
+                        .collect();
                 } else {
-                    content.push_str(&self.buffer.get_line(open_line).chars().skip(content_start).take(usize::MAX).collect::<String>());
+                    content.push_str(
+                        &self
+                            .buffer
+                            .get_line(open_line)
+                            .chars()
+                            .skip(content_start)
+                            .take(usize::MAX)
+                            .collect::<String>(),
+                    );
                     content.push('\n');
                     for l in (open_line + 1)..close_line {
                         content.push_str(&self.buffer.get_line(l));
                         content.push('\n');
                     }
-                    content.push_str(&self.buffer.get_line(close_line).chars().take(content_end).collect::<String>());
+                    content.push_str(
+                        &self
+                            .buffer
+                            .get_line(close_line)
+                            .chars()
+                            .take(content_end)
+                            .collect::<String>(),
+                    );
                 }
 
                 self.register.set(register, &content);
@@ -1149,7 +1132,7 @@ impl Editor {
         self.on_buffer_modified();
     }
 
-    async fn handle_visual(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_visual(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
                 let prev_mode = self.state.mode;
@@ -1293,7 +1276,7 @@ impl Editor {
         self.buffer.line_to_char(line_idx)
     }
 
-    async fn handle_insert(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_insert(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
                 let prev_mode = self.state.mode;
@@ -1338,6 +1321,13 @@ impl Editor {
     fn on_buffer_modified(&mut self) {
         self.plugin_manager.emit(PluginEvent::BufferChange);
         self.needs_render = true;
+    }
+
+    pub(crate) fn transition_mode(&mut self, to: Mode) {
+        let from = self.state.mode;
+        self.state.mode = to;
+        self.plugin_manager
+            .emit(PluginEvent::ModeChange { from, to });
     }
 
     pub(crate) fn undo(&mut self) {
@@ -1508,7 +1498,7 @@ impl Editor {
         self.needs_render = true;
     }
 
-    async fn handle_command(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_command(&mut self, key: KeyCode) {
         if self.state.has_confirmation() {
             self.handle_confirmation(key).await;
             return;
@@ -1705,10 +1695,7 @@ impl Editor {
     }
 
     async fn handle_write_path(&mut self, cmd: &str) {
-        let path_str = cmd
-            .trim_start_matches("w!")
-            .trim_start_matches("w ")
-            .trim();
+        let path_str = cmd.trim_start_matches("w!").trim_start_matches("w ").trim();
         if path_str.is_empty() {
             eprintln!("[editor] Expected filename after 'w'");
             return;
@@ -1770,7 +1757,7 @@ impl Editor {
         }
     }
 
-    async fn handle_replace(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_replace(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
                 let prev_mode = self.state.mode;
@@ -2155,7 +2142,8 @@ impl Editor {
     pub(crate) fn delete_char_forward(&mut self) {
         let line = self.buffer.get_line(self.state.cursor.line);
         if self.state.cursor.col < line.len() {
-            self.buffer.delete(self.state.cursor.line, self.state.cursor.col);
+            self.buffer
+                .delete(self.state.cursor.line, self.state.cursor.col);
             self.state.dirty = true;
             self.needs_render = true;
         }
@@ -2177,7 +2165,8 @@ impl Editor {
     }
 
     pub(crate) fn insert_char(&mut self, c: char) {
-        self.buffer.insert_char(self.state.cursor.line, self.state.cursor.col, c);
+        self.buffer
+            .insert_char(self.state.cursor.line, self.state.cursor.col, c);
         self.state.cursor.col += 1;
         self.state.dirty = true;
         self.needs_render = true;
@@ -2185,7 +2174,8 @@ impl Editor {
 
     pub(crate) fn delete_char_backward(&mut self) {
         if self.state.cursor.col > 0 {
-            self.buffer.delete(self.state.cursor.line, self.state.cursor.col - 1);
+            self.buffer
+                .delete(self.state.cursor.line, self.state.cursor.col - 1);
             self.state.cursor.col -= 1;
             self.state.dirty = true;
             self.needs_render = true;
@@ -2203,7 +2193,8 @@ impl Editor {
     pub(crate) fn insert_newline(&mut self) {
         let line = self.buffer.get_line(self.state.cursor.line);
         let (_, after) = line.split_at(self.state.cursor.col);
-        self.buffer.insert(self.state.cursor.line, self.state.cursor.col, "\n");
+        self.buffer
+            .insert(self.state.cursor.line, self.state.cursor.col, "\n");
         if !after.is_empty() {
             self.buffer.insert(self.state.cursor.line + 1, 0, after);
         }
@@ -2214,7 +2205,9 @@ impl Editor {
     }
 
     pub fn kill_word(&mut self) {
-        let (_, _, end_col) = self.buffer.get_word_range(self.state.cursor.line, self.state.cursor.col);
+        let (_, _, end_col) = self
+            .buffer
+            .get_word_range(self.state.cursor.line, self.state.cursor.col);
         if end_col > self.state.cursor.col {
             self.buffer.delete_range(
                 self.state.cursor.line,
@@ -2261,7 +2254,8 @@ impl Editor {
     }
 
     pub fn insert_tab(&mut self) {
-        self.buffer.insert_char(self.state.cursor.line, self.state.cursor.col, '\t');
+        self.buffer
+            .insert_char(self.state.cursor.line, self.state.cursor.col, '\t');
         self.state.cursor.col += 1;
         self.state.dirty = true;
         self.needs_render = true;

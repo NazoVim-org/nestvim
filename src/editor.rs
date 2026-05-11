@@ -7,14 +7,15 @@ use crate::register::Register;
 use crate::renderer::Renderer;
 use crate::terminal::Terminal;
 use crate::types::{
-    ConfirmAction, EditorState, Keymap, Mode, PluginEvent, SearchDirection, SearchResult, VisualType,
+    ConfirmAction, EditorState, Keymap, Mode, PluginEvent, SearchDirection, SearchResult,
+    VisualType,
 };
 use crate::undo::UndoManager;
-use std::cell::RefCell;
-use std::rc::Rc;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind, KeyModifiers};
 use futures::StreamExt;
+use std::cell::RefCell;
 use std::io;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 pub struct Editor {
@@ -65,7 +66,63 @@ pub(crate) enum DotAction {
 }
 
 impl Editor {
-    pub async fn new(file_path: Option<&str>, keymap: Keymap) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new_headless_for_test(keymap: Keymap) -> Result<Self, Box<dyn std::error::Error>> {
+        let terminal = Terminal::new()?;
+        let buffer = TextBuffer::new();
+        let highlighter = Highlighter::new();
+        let plugin_manager = PluginManager::new();
+        let renderer = Renderer::new();
+        let register = Register::new();
+        let undo_manager = UndoManager::new();
+        let state = EditorState {
+            mode: Mode::Normal,
+            cursor: crate::types::Position { line: 1, col: 0 },
+            file_path: None,
+            dirty: false,
+            command_buffer: String::new(),
+            visual_start: None,
+            visual_type: None,
+            marks: crate::types::Marks::new(),
+            macros: crate::types::Macros::new(),
+            confirmation_prompt: None,
+            show_line_numbers: true,
+        };
+
+        Ok(Self {
+            terminal,
+            buffer,
+            highlighter,
+            renderer,
+            plugin_manager,
+            register,
+            undo_manager,
+            state,
+            running: false,
+            last_highlight_mod_count: 0,
+            last_keypress_time: Instant::now(),
+            needs_render: true,
+            pending_operator: None,
+            pending_register: None,
+            pending_mark: None,
+            pending_macro_play: None,
+            search_query: String::new(),
+            search_direction: SearchDirection::Forward,
+            search_results: Vec::new(),
+            current_search_idx: 0,
+            dot_last_action: None,
+            replace_char: None,
+            last_fchar: None,
+            last_fchar_till: false,
+            keymap,
+            keymap_handler: create_keymap(keymap),
+            pending_save: false,
+        })
+    }
+
+    pub async fn new(
+        file_path: Option<&str>,
+        keymap: Keymap,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut terminal = Terminal::new()?;
 
         terminal.enable_raw_mode()?;
@@ -209,7 +266,9 @@ impl Editor {
     async fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
         if self.keymap == Keymap::Emacs {
             let editor_ptr = self as *mut Editor;
-            self.keymap_handler.borrow_mut().handle_key(editor_ptr, key, modifiers);
+            self.keymap_handler
+                .borrow_mut()
+                .handle_key(editor_ptr, key, modifiers);
             return;
         }
 
@@ -799,8 +858,7 @@ impl Editor {
                         start + word.len(),
                     );
                     self.register.set(register, &content);
-                    let char_start =
-                        self.buffer.line_to_char(self.state.cursor.line - 1) + start;
+                    let char_start = self.buffer.line_to_char(self.state.cursor.line - 1) + start;
                     let char_end = char_start + word.len();
                     self.buffer.remove_range(char_start, char_end);
                 }
@@ -877,7 +935,8 @@ impl Editor {
                                 break;
                             }
                         }
-                        let char_start = self.buffer.line_to_char(self.state.cursor.line - 1) + aw_start;
+                        let char_start =
+                            self.buffer.line_to_char(self.state.cursor.line - 1) + aw_start;
                         let char_end = char_start + (aw_end - aw_start);
                         let content = self.buffer.get_char_range(
                             self.state.cursor.line,
@@ -940,8 +999,13 @@ impl Editor {
                     (start, end + 1)
                 };
 
-                let content: String = line.chars().skip(content_start).take(content_end - content_start).collect();
-                let char_start = self.buffer.line_to_char(self.state.cursor.line - 1) + content_start;
+                let content: String = line
+                    .chars()
+                    .skip(content_start)
+                    .take(content_end - content_start)
+                    .collect();
+                let char_start =
+                    self.buffer.line_to_char(self.state.cursor.line - 1) + content_start;
                 let char_end = char_start + content.len();
 
                 self.register.set(register, &content);
@@ -1009,15 +1073,34 @@ impl Editor {
                 let mut content = String::new();
                 if open_line == close_line {
                     let line_str = self.buffer.get_line(open_line);
-                    content = line_str.chars().skip(content_start).take(content_end - content_start).collect();
+                    content = line_str
+                        .chars()
+                        .skip(content_start)
+                        .take(content_end - content_start)
+                        .collect();
                 } else {
-                    content.push_str(&self.buffer.get_line(open_line).chars().skip(content_start).take(usize::MAX).collect::<String>());
+                    content.push_str(
+                        &self
+                            .buffer
+                            .get_line(open_line)
+                            .chars()
+                            .skip(content_start)
+                            .take(usize::MAX)
+                            .collect::<String>(),
+                    );
                     content.push('\n');
                     for l in (open_line + 1)..close_line {
                         content.push_str(&self.buffer.get_line(l));
                         content.push('\n');
                     }
-                    content.push_str(&self.buffer.get_line(close_line).chars().take(content_end).collect::<String>());
+                    content.push_str(
+                        &self
+                            .buffer
+                            .get_line(close_line)
+                            .chars()
+                            .take(content_end)
+                            .collect::<String>(),
+                    );
                 }
 
                 self.register.set(register, &content);
@@ -1705,10 +1788,7 @@ impl Editor {
     }
 
     async fn handle_write_path(&mut self, cmd: &str) {
-        let path_str = cmd
-            .trim_start_matches("w!")
-            .trim_start_matches("w ")
-            .trim();
+        let path_str = cmd.trim_start_matches("w!").trim_start_matches("w ").trim();
         if path_str.is_empty() {
             eprintln!("[editor] Expected filename after 'w'");
             return;
@@ -2155,7 +2235,8 @@ impl Editor {
     pub(crate) fn delete_char_forward(&mut self) {
         let line = self.buffer.get_line(self.state.cursor.line);
         if self.state.cursor.col < line.len() {
-            self.buffer.delete(self.state.cursor.line, self.state.cursor.col);
+            self.buffer
+                .delete(self.state.cursor.line, self.state.cursor.col);
             self.state.dirty = true;
             self.needs_render = true;
         }
@@ -2177,7 +2258,8 @@ impl Editor {
     }
 
     pub(crate) fn insert_char(&mut self, c: char) {
-        self.buffer.insert_char(self.state.cursor.line, self.state.cursor.col, c);
+        self.buffer
+            .insert_char(self.state.cursor.line, self.state.cursor.col, c);
         self.state.cursor.col += 1;
         self.state.dirty = true;
         self.needs_render = true;
@@ -2185,7 +2267,8 @@ impl Editor {
 
     pub(crate) fn delete_char_backward(&mut self) {
         if self.state.cursor.col > 0 {
-            self.buffer.delete(self.state.cursor.line, self.state.cursor.col - 1);
+            self.buffer
+                .delete(self.state.cursor.line, self.state.cursor.col - 1);
             self.state.cursor.col -= 1;
             self.state.dirty = true;
             self.needs_render = true;
@@ -2203,7 +2286,8 @@ impl Editor {
     pub(crate) fn insert_newline(&mut self) {
         let line = self.buffer.get_line(self.state.cursor.line);
         let (_, after) = line.split_at(self.state.cursor.col);
-        self.buffer.insert(self.state.cursor.line, self.state.cursor.col, "\n");
+        self.buffer
+            .insert(self.state.cursor.line, self.state.cursor.col, "\n");
         if !after.is_empty() {
             self.buffer.insert(self.state.cursor.line + 1, 0, after);
         }
@@ -2214,7 +2298,9 @@ impl Editor {
     }
 
     pub fn kill_word(&mut self) {
-        let (_, _, end_col) = self.buffer.get_word_range(self.state.cursor.line, self.state.cursor.col);
+        let (_, _, end_col) = self
+            .buffer
+            .get_word_range(self.state.cursor.line, self.state.cursor.col);
         if end_col > self.state.cursor.col {
             self.buffer.delete_range(
                 self.state.cursor.line,
@@ -2261,7 +2347,8 @@ impl Editor {
     }
 
     pub fn insert_tab(&mut self) {
-        self.buffer.insert_char(self.state.cursor.line, self.state.cursor.col, '\t');
+        self.buffer
+            .insert_char(self.state.cursor.line, self.state.cursor.col, '\t');
         self.state.cursor.col += 1;
         self.state.dirty = true;
         self.needs_render = true;
@@ -2303,5 +2390,37 @@ impl Editor {
 
     pub fn quit(&mut self) {
         self.running = false;
+    }
+
+    pub fn set_buffer_for_test(&mut self, text: &str) {
+        self.buffer = TextBuffer::new();
+        for ch in text.chars() {
+            if ch == '\n' {
+                self.buffer
+                    .insert_newline(self.state.cursor.line, self.state.cursor.col);
+                self.state.cursor.line += 1;
+                self.state.cursor.col = 0;
+            } else {
+                self.buffer
+                    .insert_char(self.state.cursor.line, self.state.cursor.col, ch);
+                self.state.cursor.col += 1;
+            }
+        }
+        self.state.cursor.line = 1;
+        self.state.cursor.col = 0;
+        self.state.mode = Mode::Normal;
+    }
+
+    pub fn snapshot_for_test(&self) -> (String, usize, usize, Mode) {
+        (
+            self.buffer.to_string(),
+            self.state.cursor.line,
+            self.state.cursor.col,
+            self.state.mode,
+        )
+    }
+
+    pub async fn handle_key_for_test(&mut self, key: KeyCode, modifiers: KeyModifiers) {
+        self.handle_key(key, modifiers).await;
     }
 }

@@ -42,8 +42,8 @@ enum ModeCommand {
 
 fn resolve_cli(cli: Cli) -> (Keymap, Option<String>) {
     match cli.mode {
-        Some(ModeCommand::Vim { file }) => (Keymap::Vim, file),
-        Some(ModeCommand::Emacs { file }) => (Keymap::Emacs, file),
+        Some(ModeCommand::Vim { file }) => (Keymap::Vim, file.or(cli.file)),
+        Some(ModeCommand::Emacs { file }) => (Keymap::Emacs, file.or(cli.file)),
         None => (Keymap::Vim, cli.file),
     }
 }
@@ -111,6 +111,15 @@ mod tests {
             .expect("top-level file argument should parse");
         let (keymap, file) = resolve_cli(cli);
         assert_eq!(keymap, Keymap::Vim);
+        assert_eq!(file.as_deref(), Some("sample.txt"));
+    }
+
+    #[test]
+    fn honors_parent_file_when_mode_subcommand_is_present() {
+        let cli = Cli::try_parse_from(["nestvim", "sample.txt", "emacs"])
+            .expect("parent file before mode subcommand should parse");
+        let (keymap, file) = resolve_cli(cli);
+        assert_eq!(keymap, Keymap::Emacs);
         assert_eq!(file.as_deref(), Some("sample.txt"));
     }
 

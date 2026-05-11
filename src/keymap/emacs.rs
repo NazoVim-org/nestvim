@@ -105,7 +105,7 @@ impl KeymapHandler for EmacsKeymap {
                 editor.yank_pop();
             }
             (true, KeyCode::Char('o')) => {
-                editor.save_current_buffer();
+                editor.pending_save = true;
             }
             (true, KeyCode::Char('t')) => {
                 editor.transpose_chars();

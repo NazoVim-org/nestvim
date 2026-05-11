@@ -66,3 +66,57 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_vim_subcommand_without_file() {
+        let cli = Cli::try_parse_from(["nestvim", "vim"]).expect("vim subcommand should parse");
+        let (keymap, file) = resolve_cli(cli);
+        assert_eq!(keymap, Keymap::Vim);
+        assert_eq!(file, None);
+    }
+
+    #[test]
+    fn parses_emacs_subcommand_without_file() {
+        let cli = Cli::try_parse_from(["nestvim", "emacs"]).expect("emacs subcommand should parse");
+        let (keymap, file) = resolve_cli(cli);
+        assert_eq!(keymap, Keymap::Emacs);
+        assert_eq!(file, None);
+    }
+
+    #[test]
+    fn parses_vim_subcommand_with_file() {
+        let cli = Cli::try_parse_from(["nestvim", "vim", "sample.txt"])
+            .expect("vim subcommand with file should parse");
+        let (keymap, file) = resolve_cli(cli);
+        assert_eq!(keymap, Keymap::Vim);
+        assert_eq!(file.as_deref(), Some("sample.txt"));
+    }
+
+    #[test]
+    fn parses_emacs_subcommand_with_file() {
+        let cli = Cli::try_parse_from(["nestvim", "emacs", "sample.txt"])
+            .expect("emacs subcommand with file should parse");
+        let (keymap, file) = resolve_cli(cli);
+        assert_eq!(keymap, Keymap::Emacs);
+        assert_eq!(file.as_deref(), Some("sample.txt"));
+    }
+
+    #[test]
+    fn parses_top_level_file_as_default_vim() {
+        let cli = Cli::try_parse_from(["nestvim", "sample.txt"])
+            .expect("top-level file argument should parse");
+        let (keymap, file) = resolve_cli(cli);
+        assert_eq!(keymap, Keymap::Vim);
+        assert_eq!(file.as_deref(), Some("sample.txt"));
+    }
+
+    #[test]
+    fn rejects_unknown_mode_subcommand() {
+        let result = Cli::try_parse_from(["nestvim", "invalid-mode"]);
+        assert!(result.is_err());
+    }
+}

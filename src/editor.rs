@@ -1279,13 +1279,8 @@ impl Editor {
     pub(crate) async fn handle_insert(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
-                let prev_mode = self.state.mode;
-                self.state.mode = Mode::Normal;
+                self.transition_mode(Mode::Normal);
                 self.state.cursor.col = self.state.cursor.col.saturating_sub(1);
-                self.plugin_manager.emit(PluginEvent::ModeChange {
-                    from: prev_mode,
-                    to: Mode::Normal,
-                });
                 self.needs_render = true;
             }
             KeyCode::Backspace => {
@@ -1587,23 +1582,13 @@ impl Editor {
                 }
 
                 if !self.state.has_confirmation() {
-                    let prev_mode = self.state.mode;
-                    self.state.mode = Mode::Normal;
-                    self.plugin_manager.emit(PluginEvent::ModeChange {
-                        from: prev_mode,
-                        to: Mode::Normal,
-                    });
+                    self.transition_mode(Mode::Normal);
                     self.needs_render = true;
                 }
             }
             KeyCode::Esc => {
                 self.state.command_buffer.clear();
-                let prev_mode = self.state.mode;
-                self.state.mode = Mode::Normal;
-                self.plugin_manager.emit(PluginEvent::ModeChange {
-                    from: prev_mode,
-                    to: Mode::Normal,
-                });
+                self.transition_mode(Mode::Normal);
                 self.needs_render = true;
             }
             KeyCode::Backspace => {
@@ -1760,13 +1745,8 @@ impl Editor {
     pub(crate) async fn handle_replace(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
-                let prev_mode = self.state.mode;
-                self.state.mode = Mode::Normal;
+                self.transition_mode(Mode::Normal);
                 self.replace_char = None;
-                self.plugin_manager.emit(PluginEvent::ModeChange {
-                    from: prev_mode,
-                    to: Mode::Normal,
-                });
                 self.needs_render = true;
             }
             KeyCode::Char(c) => {

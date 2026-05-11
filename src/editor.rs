@@ -123,6 +123,7 @@ impl Editor {
         file_path: Option<&str>,
         keymap: Keymap,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        // 既存のまま
         let mut terminal = Terminal::new()?;
 
         terminal.enable_raw_mode()?;
@@ -264,18 +265,13 @@ impl Editor {
     }
 
     async fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) {
-        if self.keymap == Keymap::Emacs {
-            let editor_ptr = self as *mut Editor;
-            self.keymap_handler
-                .borrow_mut()
-                .handle_key(editor_ptr, key, modifiers);
-            return;
-        }
-
-        self.handle_key_vim(key, modifiers).await;
+        let editor_ptr = self as *mut Editor;
+        self.keymap_handler
+            .borrow_mut()
+            .handle_key(editor_ptr, key, modifiers);
     }
-
-    pub async fn handle_key_vim(&mut self, key: KeyCode, modifiers: KeyModifiers) {
+    
+    pub(crate) fn vim_on_key_event(&mut self, key: KeyCode) {
         if let KeyCode::Char(c) = key {
             self.plugin_manager.emit(PluginEvent::Key {
                 mode: self.state.mode,
@@ -287,51 +283,9 @@ impl Editor {
                 self.state.macros.add_key(key_str);
             }
         }
-
-        if modifiers.contains(KeyModifiers::CONTROL) {
-            match self.state.mode {
-                Mode::Normal | Mode::Insert | Mode::Replace => match key {
-                    KeyCode::Char('d') => {
-                        self.scroll_by(self.terminal.rows() as usize / 2);
-                        self.needs_render = true;
-                        return;
-                    }
-                    KeyCode::Char('u') => {
-                        self.scroll_by(self.terminal.rows() as usize / 2);
-                        self.needs_render = true;
-                        return;
-                    }
-                    KeyCode::Char('y') => {
-                        self.scroll_up_one();
-                        self.needs_render = true;
-                        return;
-                    }
-                    KeyCode::Char('e') => {
-                        self.scroll_down_one();
-                        self.needs_render = true;
-                        return;
-                    }
-                    KeyCode::Char('g') => {
-                        self.show_file_info();
-                        self.needs_render = true;
-                        return;
-                    }
-                    _ => {}
-                },
-                _ => {}
-            }
-        }
-
-        match self.state.mode {
-            Mode::Normal => self.handle_normal(key).await,
-            Mode::Insert => self.handle_insert(key).await,
-            Mode::Command => self.handle_command(key).await,
-            Mode::Visual => self.handle_visual(key).await,
-            Mode::Replace => self.handle_replace(key).await,
-        }
     }
 
-    async fn handle_normal(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_normal(&mut self, key: KeyCode) {
         let line_count = self.buffer.line_count();
 
         if let Some(op) = self.pending_operator {
@@ -1232,7 +1186,7 @@ impl Editor {
         self.on_buffer_modified();
     }
 
-    async fn handle_visual(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_visual(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
                 let prev_mode = self.state.mode;
@@ -1376,16 +1330,11 @@ impl Editor {
         self.buffer.line_to_char(line_idx)
     }
 
-    async fn handle_insert(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_insert(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
-                let prev_mode = self.state.mode;
-                self.state.mode = Mode::Normal;
+                self.transition_mode(Mode::Normal);
                 self.state.cursor.col = self.state.cursor.col.saturating_sub(1);
-                self.plugin_manager.emit(PluginEvent::ModeChange {
-                    from: prev_mode,
-                    to: Mode::Normal,
-                });
                 self.needs_render = true;
             }
             KeyCode::Backspace => {
@@ -1421,6 +1370,13 @@ impl Editor {
     fn on_buffer_modified(&mut self) {
         self.plugin_manager.emit(PluginEvent::BufferChange);
         self.needs_render = true;
+    }
+
+    pub(crate) fn transition_mode(&mut self, to: Mode) {
+        let from = self.state.mode;
+        self.state.mode = to;
+        self.plugin_manager
+            .emit(PluginEvent::ModeChange { from, to });
     }
 
     pub(crate) fn undo(&mut self) {
@@ -1591,7 +1547,7 @@ impl Editor {
         self.needs_render = true;
     }
 
-    async fn handle_command(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_command(&mut self, key: KeyCode) {
         if self.state.has_confirmation() {
             self.handle_confirmation(key).await;
             return;
@@ -1680,23 +1636,13 @@ impl Editor {
                 }
 
                 if !self.state.has_confirmation() {
-                    let prev_mode = self.state.mode;
-                    self.state.mode = Mode::Normal;
-                    self.plugin_manager.emit(PluginEvent::ModeChange {
-                        from: prev_mode,
-                        to: Mode::Normal,
-                    });
+                    self.transition_mode(Mode::Normal);
                     self.needs_render = true;
                 }
             }
             KeyCode::Esc => {
                 self.state.command_buffer.clear();
-                let prev_mode = self.state.mode;
-                self.state.mode = Mode::Normal;
-                self.plugin_manager.emit(PluginEvent::ModeChange {
-                    from: prev_mode,
-                    to: Mode::Normal,
-                });
+                self.transition_mode(Mode::Normal);
                 self.needs_render = true;
             }
             KeyCode::Backspace => {
@@ -1850,16 +1796,11 @@ impl Editor {
         }
     }
 
-    async fn handle_replace(&mut self, key: KeyCode) {
+    pub(crate) async fn handle_replace(&mut self, key: KeyCode) {
         match key {
             KeyCode::Esc => {
-                let prev_mode = self.state.mode;
-                self.state.mode = Mode::Normal;
+                self.transition_mode(Mode::Normal);
                 self.replace_char = None;
-                self.plugin_manager.emit(PluginEvent::ModeChange {
-                    from: prev_mode,
-                    to: Mode::Normal,
-                });
                 self.needs_render = true;
             }
             KeyCode::Char(c) => {
